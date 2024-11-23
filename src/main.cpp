@@ -1,10 +1,10 @@
-#include "main.hpp"
-
 // Parthenon headers
 #include "parthenon_manager.hpp"
+#include "utils/error_checking.hpp"
 
 // Apophis headers
 #include "apophis_driver.hpp"
+#include "pgen/pgen.hpp"
 
 int main(int argc, char *argv[]) {
   using parthenon::ParthenonManager;
@@ -24,6 +24,13 @@ int main(int argc, char *argv[]) {
   pman.app_input->ProcessPackages = Apophis::ProcessPackages;
   const auto problem =
       pman.pinput->GetOrAddString("job", "problem_id", "unset");
+  if (problem == "sod") {
+    pman.app_input->ProblemGenerator = sod::ProblemGenerator;
+  } else if (problem == "unset") {
+    PARTHENON_FAIL("[Apophis]: Problem unset. Exiting.");
+  } else {
+    PARTHENON_FAIL("[Apophis]: Problem not recognized. Exiting.");
+  }
 
   if (parthenon::Globals::my_rank == 0) {
     std::cout << "[Apophis]: Initializing..." << std::endl;
