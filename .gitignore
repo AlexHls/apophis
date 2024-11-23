@@ -47,3 +47,6 @@ CMakeUserPresets.json
 
 # build directory
 build/
+
+# Cache
+.cache/
