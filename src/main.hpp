@@ -5,10 +5,41 @@
 
 enum {
   IDN = 0,
+  IM1 = 1,
+  IM2 = 2,
+  IM3 = 3,
+  IEN = 4,
+  NHYDRO = 5,
+};
+
+enum {
   IV1 = 1,
   IV2 = 2,
   IV3 = 3,
-  IEN = 4
+  IPR = 4,
+};
+
+enum class Fluid {
+  undefined,
+  euler,
+};
+
+enum class Reconstruction {
+  undefined,
+  dc,
+  plm,
+};
+
+enum class RiemannSolver {
+  undefined,
+  hllc,
+};
+
+enum class Integrator {
+  undefined,
+  rk1,
+  rk2,
+  rk3,
 };
 
 #endif // MAIN_HPP_

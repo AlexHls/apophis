@@ -1,3 +1,6 @@
 [submodule "submodules/parthenon"]
 	path = submodules/parthenon
 	url = https://github.com/parthenon-hpc-lab/parthenon.git
+[submodule "submodules/singularity-eos"]
+	path = submodules/singularity-eos
+	url = https://github.com/lanl/singularity-eos

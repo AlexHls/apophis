@@ -35,6 +35,7 @@ int main(int argc, char *argv[]) {
   if (parthenon::Globals::my_rank == 0) {
     std::cout << "[Apophis]: Initializing..." << std::endl;
   }
+  pman.ParthenonInitPackagesAndMesh();
 
   Apophis::ApophisDriver driver(pman.pinput.get(), pman.app_input.get(),
                                 pman.pmesh.get());

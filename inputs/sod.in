@@ -46,14 +46,14 @@ dt = 0.025
 variables = prim
 
 <parthenon/time>
-integrator = vl2
+integrator = rk2
 cfl = 0.5
 tlim = 0.245
 nlim = 10000
 
 <hydro>
 eos = adiabatic
-riemann = hlle
+riemann = hllc
 reconstruction = plm
 gamma = 1.4
 

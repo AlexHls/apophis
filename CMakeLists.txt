@@ -10,3 +10,6 @@ add_subdirectory(src)
 
 # Parthenon
 add_subdirectory(submodules/parthenon)
+
+# Singularity-EOS
+add_subdirectory(submodules/singularity-eos)
