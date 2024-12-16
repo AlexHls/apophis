@@ -3,6 +3,7 @@
 #include "../recon/dc_simple.hpp"
 #include "../recon/plm_simple.hpp"
 #include "rsolvers/hydro_hllc.hpp"
+#include "rsolvers/hydro_hlle.hpp"
 
 #include "basic_types.hpp"
 #include "interface/state_descriptor.hpp"
@@ -88,6 +89,8 @@ InitializeHydro(ParameterInput *pin) {
 
   if (riemann_str == "hllc") {
     riemann = RiemannSolver::hllc;
+  } else if (riemann_str == "hlle") {
+    riemann = RiemannSolver::hlle;
   } else {
     PARTHENON_FAIL("[Apophis]: Riemann solver not recognized. Exiting.");
   }
@@ -100,6 +103,10 @@ InitializeHydro(ParameterInput *pin) {
   add_flux_fun<Fluid::euler, Reconstruction::dc, RiemannSolver::hllc>(
       flux_functions);
   add_flux_fun<Fluid::euler, Reconstruction::plm, RiemannSolver::hllc>(
+      flux_functions);
+  add_flux_fun<Fluid::euler, Reconstruction::dc, RiemannSolver::hlle>(
+      flux_functions);
+  add_flux_fun<Fluid::euler, Reconstruction::plm, RiemannSolver::hlle>(
       flux_functions);
 
   FluxFun_t *flux_other_stage = nullptr;
@@ -116,6 +123,11 @@ InitializeHydro(ParameterInput *pin) {
     integrator = Integrator::rk2;
   } else if (integrator_str == "rk3") {
     integrator = Integrator::rk3;
+  } else if (integrator_str == "vl2") {
+    integrator = Integrator::vl2;
+    flux_first_stage =
+        flux_functions.at(std::make_tuple(fluid, Reconstruction::dc, riemann));
+
   } else {
     PARTHENON_FAIL("[Apophis]: Integrator not recognized. Exiting.");
   }

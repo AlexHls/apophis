@@ -83,7 +83,7 @@ struct Riemann<Fluid::euler, RiemannSolver::hllc> {
 
       //-- Step 4. Compute the max/min wave speeds based on L/R
       Real bp = sr > 0.0 ? sr : (TINY_NUMBER);
-      Real bm = sl < 0.0 ? sl : (TINY_NUMBER);
+      Real bm = sl < 0.0 ? sl : -(TINY_NUMBER);
 
       //-- Step 5. Compute L/R conserved variables
       Real vxl = wli[IV1] - sl;

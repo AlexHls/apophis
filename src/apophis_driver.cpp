@@ -59,9 +59,6 @@ TaskCollection ApophisDriver::MakeTaskCollection(BlockList_t &blocks,
   for (int i = 0; i < num_partitions; i++) {
     auto &tl = single_tasklist_per_pack_region[i];
     auto &mu0 = pmesh->mesh_data.GetOrAdd("base", i);
-    auto &mu1 = pmesh->mesh_data.GetOrAdd("u1", i);
-    const auto any = parthenon::BoundaryType::any;
-    tl.AddTask(none, parthenon::StartReceiveBoundBufs<any>, mu0);
     tl.AddTask(none, parthenon::StartReceiveFluxCorrections, mu0);
 
     const auto flux_str =
@@ -75,6 +72,7 @@ TaskCollection ApophisDriver::MakeTaskCollection(BlockList_t &blocks,
         tl.AddTask(calc_flux, parthenon::ReceiveFluxCorrections, mu0);
     auto set_flx = tl.AddTask(recv_flx, parthenon::SetFluxCorrections, mu0);
 
+    auto &mu1 = pmesh->mesh_data.GetOrAdd("u1", i);
     auto update = tl.AddTask(
         set_flx, parthenon::Update::UpdateWithFluxDivergence<MeshData<Real>>,
         mu0.get(), mu1.get(), integrator->gam0[stage - 1],

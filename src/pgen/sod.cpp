@@ -31,15 +31,15 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
       KOKKOS_LAMBDA(const int k, const int j, const int i) {
         if (coords.Xc<1>(k, j, i) < x_discont) {
           u(IDN, k, j, i) = rho_l;
-          u(IV1, k, j, i) = rho_l * u_l;
-          u(IV2, k, j, i) = 0.0;
-          u(IV3, k, j, i) = 0.0;
+          u(IM1, k, j, i) = rho_l * u_l;
+          u(IM2, k, j, i) = 0.0;
+          u(IM3, k, j, i) = 0.0;
           u(IEN, k, j, i) = 0.5 * rho_l * u_l * u_l + press_l / (gamma - 1.0);
         } else {
           u(IDN, k, j, i) = rho_r;
-          u(IV1, k, j, i) = rho_r * u_r;
-          u(IV2, k, j, i) = 0.0;
-          u(IV3, k, j, i) = 0.0;
+          u(IM1, k, j, i) = rho_r * u_r;
+          u(IM2, k, j, i) = 0.0;
+          u(IM3, k, j, i) = 0.0;
           u(IEN, k, j, i) = 0.5 * rho_r * u_r * u_r + press_r / (gamma - 1.0);
         }
       });

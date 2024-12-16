@@ -32,6 +32,7 @@ enum class Reconstruction {
 
 enum class RiemannSolver {
   undefined,
+  hlle,
   hllc,
 };
 
@@ -40,6 +41,7 @@ enum class Integrator {
   rk1,
   rk2,
   rk3,
+  vl2,
 };
 
 constexpr parthenon::Real float_min{std::numeric_limits<float>::min()};
