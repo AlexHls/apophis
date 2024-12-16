@@ -179,6 +179,9 @@ InitializeHydro(ParameterInput *pin) {
   pkg->AddParam<Real>("hydro/density_floor", dfloor);
   pkg->AddParam<Real>("hydro/pressure_floor", pfloor);
 
+  auto scratch_level = pin->GetOrAddInteger("hdyro", "scratch_level", 0);
+  pkg->AddParam<int>("scratch_level", scratch_level);
+
   return pkg;
 }
 
@@ -384,7 +387,6 @@ TaskStatus CalculateFluxes(std::shared_ptr<MeshData<Real>> &md) {
   auto cons_pack = md->PackVariablesAndFluxes(flags_ind);
   auto pkg = pmb->packages.Get("Hydro");
   const int nhydro = pkg->Param<int>("nhydro");
-  const int num_species = pkg->Param<int>("num_species");
 
   const auto &eos = pkg->Param<singularity::EOS>("eos");
 
@@ -436,7 +438,7 @@ TaskStatus CalculateFluxes(std::shared_ptr<MeshData<Real>> &md) {
         member.team_barrier();
 
         riemann.Solve(member, k, j, ib.s, ib.e + 1, IV1, wl, wr, cons, ifl, ifr,
-                      eos, num_species, eos_lambda);
+                      eos, eos_lambda);
       });
   //--------------------------------------------------------------------------------------
   // j-direction
@@ -481,7 +483,7 @@ TaskStatus CalculateFluxes(std::shared_ptr<MeshData<Real>> &md) {
 
             if (j > jb.s - 1) {
               riemann.Solve(member, k, j, il, iu, IV2, wl, wr, cons, ifl, ifr,
-                            eos, num_species, eos_lambda);
+                            eos, eos_lambda);
               member.team_barrier();
             }
 
@@ -534,7 +536,7 @@ TaskStatus CalculateFluxes(std::shared_ptr<MeshData<Real>> &md) {
 
             if (k > kb.s - 1) {
               riemann.Solve(member, k, j, il, iu, IV3, wl, wr, cons, ifl, ifr,
-                            eos, num_species, eos_lambda);
+                            eos, eos_lambda);
               member.team_barrier();
             }
             // swap the arrays for the next step

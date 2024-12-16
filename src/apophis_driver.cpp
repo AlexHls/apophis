@@ -26,7 +26,7 @@ TaskCollection ApophisDriver::MakeTaskCollection(BlockList_t &blocks,
                                                  int stage) {
   TaskCollection tc;
   const auto &stage_name = integrator->stage_name;
-  auto hydro_pkg = blocks[0]->packages.Get("hydro");
+  auto hydro_pkg = blocks[0]->packages.Get("Hydro");
 
   TaskID none(0);
 
