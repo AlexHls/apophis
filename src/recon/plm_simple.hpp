@@ -38,7 +38,7 @@ Reconstruct(parthenon::team_mbr_t const &member, const int k, const int j, const
   for (auto n = 0; n < nvar; ++n) {
     parthenon::par_for_inner(member, il, iu, [&](const int i) {
       if constexpr (XNDIR == parthenon::X1DIR) {
-        PLM(q(n, k, j, i - 1), q(n, k, j, i), q(n, k, j, i + 1), ql(n, i), qr(n, i));
+        PLM(q(n, k, j, i - 1), q(n, k, j, i), q(n, k, j, i + 1), ql(n, i + 1), qr(n, i));
       } else if constexpr (XNDIR == parthenon::X2DIR) {
         PLM(q(n, k, j - 1, i), q(n, k, j, i), q(n, k, j + 1, i), ql(n, i), qr(n, i));
       } else if constexpr (XNDIR == parthenon::X3DIR) {

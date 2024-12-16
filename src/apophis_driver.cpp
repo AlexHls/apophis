@@ -90,10 +90,6 @@ TaskCollection ApophisDriver::MakeTaskCollection(BlockList_t &blocks,
     auto &tl = async_region_3[i];
     auto &u0 = blocks[i]->meshblock_data.Get("base");
     auto prolongBound = none;
-    // TODO: Implement multilevel
-    /*if (pmesh->multilevel) {
-      prolongBound = tl.AddTask(none, parthenon::ProlongateBoundaries, u0);
-    } */
 
     auto set_bc =
         tl.AddTask(prolongBound, parthenon::ApplyBoundaryConditions, u0);
