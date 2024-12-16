@@ -5,6 +5,7 @@
 #include "rsolvers.hpp"
 
 #include "parthenon/parthenon.hpp"
+#include "singularity-eos/eos/eos.hpp"
 
 using parthenon::Real;
 using parthenon::ScratchPad2D;

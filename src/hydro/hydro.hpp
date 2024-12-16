@@ -12,6 +12,12 @@ namespace Apophis {
 std::shared_ptr<parthenon::StateDescriptor>
 InitializeHydro(ParameterInput *pin);
 
+template <Fluid fluid>
+  Real EstimateTimestep(MeshData<Real> *md);
+
+template <class T>
+  void ConsToPrim(MeshData<Real> *md);
+
 TaskStatus CalculateFluxes(std::shared_ptr<MeshData<Real>> &md);
 
 template <Fluid fluid, Reconstruction recon, RiemannSolver rsolver>

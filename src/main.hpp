@@ -42,4 +42,6 @@ enum class Integrator {
   rk3,
 };
 
+constexpr parthenon::Real float_min{std::numeric_limits<float>::min()};
+
 #endif // MAIN_HPP_
