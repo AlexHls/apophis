@@ -24,4 +24,10 @@ using namespace parthenon::driver::prelude;
 void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin);
 } // namespace blast
 
+namespace kh {
+using namespace parthenon::driver::prelude;
+
+void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin);
+} // namespace kh
+
 #endif // PGEN_PGEN_HPP_

@@ -137,6 +137,31 @@ InitializeHydro(ParameterInput *pin) {
   pkg->AddParam<FluxFun_t *>("flux_first_stage", flux_first_stage);
   pkg->AddParam<FluxFun_t *>("flux_other_stage", flux_other_stage);
 
+  // Passive scalars
+  // The order of the passive scalars is important
+  auto nscalars = 0;
+
+  // Nuclear composition
+  // TODO(alexh): Make this more flexible to work with different number of
+  // isotopes
+  auto comp_str = pin->GetOrAddString("hydro", "composition", "unset");
+  int ncomp = 0;
+  std::vector<std::string> comp_labels;
+  std::vector<Real> comp_abar;
+  std::vector<Real> comp_zbar;
+  if (comp_str == "ONe") {
+    nscalars += 7; // 6 for species + 1 for electron fraction
+    ncomp = 6;
+    comp_labels = {"alpha", "C12", "O16", "Ne20", "IME", "IGE"};
+    comp_abar = {4.0, 12.0, 16.0, 20.0, 30.0, 56.0};
+    comp_zbar = {2.0, 6.0, 8.0, 10.0, 15.0, 28.0};
+  }
+  pkg->AddParam<int>("nscalars", nscalars);
+  pkg->AddParam<int>("ncomp", ncomp);
+  pkg->AddParam<std::vector<std::string>>("comp_labels", comp_labels);
+  pkg->AddParam<std::vector<Real>>("comp_abar", comp_abar);
+  pkg->AddParam<std::vector<Real>>("comp_zbar", comp_zbar);
+
   // Add fields
   std::string field_name = "cons";
   std::vector<std::string> cons_labels(NHYDRO);
@@ -145,10 +170,16 @@ InitializeHydro(ParameterInput *pin) {
   cons_labels[IM2] = "MomentumDensity2";
   cons_labels[IM3] = "MomentumDensity3";
   cons_labels[IEN] = "TotalEnergyDensity";
+  for (int i = 0; i < ncomp; i++) {
+    cons_labels.push_back("scalar_density_" + comp_labels[i]);
+  }
+  if (ncomp > 0) {
+    cons_labels.push_back("scalar_density_ye");
+  }
   parthenon::Metadata m(
       {parthenon::Metadata::Cell, parthenon::Metadata::Independent,
        parthenon::Metadata::FillGhost, parthenon::Metadata::WithFluxes},
-      std::vector<int>({NHYDRO}), cons_labels);
+      std::vector<int>({NHYDRO + nscalars}), cons_labels);
   pkg->AddField(field_name, m);
 
   field_name = "prim";
@@ -158,9 +189,15 @@ InitializeHydro(ParameterInput *pin) {
   prim_labels[IV2] = "Velocity2";
   prim_labels[IV3] = "Velocity3";
   prim_labels[IPR] = "Pressure";
+  for (int i = 0; i < ncomp; i++) {
+    prim_labels.push_back("scalar_" + comp_labels[i]);
+  }
+  if (ncomp > 0) {
+    prim_labels.push_back("scalar_ye");
+  }
   m = parthenon::Metadata(
       {parthenon::Metadata::Cell, parthenon::Metadata::Derived},
-      std::vector<int>({NHYDRO}), prim_labels);
+      std::vector<int>({NHYDRO + nscalars}), prim_labels);
   pkg->AddField(field_name, m);
 
   field_name = "eos_lambda";
@@ -331,6 +368,8 @@ template <class T> void ConsToPrim(MeshData<Real> *md) {
       md->PackVariables(std::vector<std::string>{"eos_lambda"});
   bool update_lambda = pmb->packages.Get("Hydro")->Param<bool>("update_lambda");
 
+  const auto nscalars = pmb->packages.Get("Hydro")->Param<int>("nscalars");
+
   // Temperature limits for root finding & initial guess
   static constexpr int ilTMin_ = 3;
   static constexpr int ilTMax_ = 13;
@@ -413,6 +452,11 @@ template <class T> void ConsToPrim(MeshData<Real> *md) {
         gamma_e = eos.GruneisenParamFromDensityInternalEnergy(
                       u_d, (u_e - e_k) / u_d, lambda) +
                   1.0;
+
+        // Convert passive scalars
+        for (int n = NHYDRO; n < NHYDRO + nscalars; ++n) {
+          prim(n, k, j, i) = cons(n, k, j, i) * di;
+        }
       });
 }
 
@@ -437,10 +481,11 @@ TaskStatus CalculateFluxes(std::shared_ptr<MeshData<Real>> &md) {
   auto cons_pack = md->PackVariablesAndFluxes(flags_ind);
   auto pkg = pmb->packages.Get("Hydro");
   const int nhydro = pkg->Param<int>("nhydro");
+  const int nscalars = pkg->Param<int>("nscalars");
 
   const auto &eos = pkg->Param<singularity::EOS>("eos");
 
-  auto num_scratch_vars = nhydro;
+  auto num_scratch_vars = nhydro + nscalars;
   auto prim_list = std::vector<std::string>({"prim"});
   auto gamma_list = std::vector<std::string>({"gamma"});
 
@@ -489,6 +534,20 @@ TaskStatus CalculateFluxes(std::shared_ptr<MeshData<Real>> &md) {
 
         riemann.Solve(member, k, j, ib.s, ib.e + 1, IV1, wl, wr, cons, ifl, ifr,
                       eos, eos_lambda);
+        member.team_barrier();
+
+        // Passive scalar fluxes
+        for (auto n = nhydro; n < nhydro + nscalars; ++n) {
+          parthenon::par_for_inner(member, ib.s, ib.e + 1, [&](const int i) {
+            if (cons.flux(IV1, IDN, k, j, i) >= 0.0) {
+              cons.flux(IV1, n, k, j, i) =
+                  cons.flux(IV1, IDN, k, j, i) * wl(n, i);
+            } else {
+              cons.flux(IV1, n, k, j, i) =
+                  cons.flux(IV1, IDN, k, j, i) * wr(n, i);
+            }
+          });
+        }
       });
   //--------------------------------------------------------------------------------------
   // j-direction
@@ -534,6 +593,20 @@ TaskStatus CalculateFluxes(std::shared_ptr<MeshData<Real>> &md) {
             if (j > jb.s - 1) {
               riemann.Solve(member, k, j, il, iu, IV2, wl, wr, cons, ifl, ifr,
                             eos, eos_lambda);
+              member.team_barrier();
+
+              // Passive scalar fluxes
+              for (auto n = nhydro; n < nhydro + nscalars; ++n) {
+                parthenon::par_for_inner(member, il, iu, [&](const int i) {
+                  if (cons.flux(IV2, IDN, k, j, i) >= 0.0) {
+                    cons.flux(IV2, n, k, j, i) =
+                        cons.flux(IV2, IDN, k, j, i) * wl(n, i);
+                  } else {
+                    cons.flux(IV2, n, k, j, i) =
+                        cons.flux(IV2, IDN, k, j, i) * wr(n, i);
+                  }
+                });
+              }
               member.team_barrier();
             }
 
@@ -587,6 +660,20 @@ TaskStatus CalculateFluxes(std::shared_ptr<MeshData<Real>> &md) {
             if (k > kb.s - 1) {
               riemann.Solve(member, k, j, il, iu, IV3, wl, wr, cons, ifl, ifr,
                             eos, eos_lambda);
+              member.team_barrier();
+
+              // Passive scalar fluxes
+              for (auto n = nhydro; n < nhydro + nscalars; ++n) {
+                parthenon::par_for_inner(member, il, iu, [&](const int i) {
+                  if (cons.flux(IV3, IDN, k, j, i) >= 0.0) {
+                    cons.flux(IV3, n, k, j, i) =
+                        cons.flux(IV3, IDN, k, j, i) * wl(n, i);
+                  } else {
+                    cons.flux(IV3, n, k, j, i) =
+                        cons.flux(IV3, IDN, k, j, i) * wr(n, i);
+                  }
+                });
+              }
               member.team_barrier();
             }
             // swap the arrays for the next step

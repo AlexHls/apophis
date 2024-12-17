@@ -32,6 +32,8 @@ int main(int argc, char *argv[]) {
     pman.app_input->UserWorkAfterLoop = linear_wave::UserWorkAfterLoop;
   } else if (problem == "blast") {
     pman.app_input->ProblemGenerator = blast::ProblemGenerator;
+  } else if (problem == "kh") {
+    pman.app_input->ProblemGenerator = kh::ProblemGenerator;
   } else if (problem == "unset") {
     PARTHENON_FAIL("[Apophis]: Problem unset. Exiting.");
   } else {
