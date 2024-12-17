@@ -15,4 +15,4 @@ function(setup_test_both dir arg test_labels)
 endfunction()
 
 setup_test_both("riemann_hydro" "--driver ${PROJECT_BINARY_DIR}/bin/apophis \
-  --driver_input ${PROJECT_SOURCE_DIR}/inputs/sod.in --num_steps 12" "other")
+  --driver_input ${PROJECT_SOURCE_DIR}/inputs/sod.in --num_steps 20" "other")
