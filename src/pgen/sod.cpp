@@ -10,10 +10,10 @@ namespace sod {
 
 void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
   Real rho_l = pin->GetOrAddReal("problem/sod", "rho_l", 1.0);
-  Real press_l = pin->GetOrAddReal("problem/sod", "press_l", 1.0);
+  Real press_l = pin->GetOrAddReal("problem/sod", "pres_l", 1.0);
   Real u_l = pin->GetOrAddReal("problem/sod", "u_l", 0.0);
   Real rho_r = pin->GetOrAddReal("problem/sod", "rho_r", 0.125);
-  Real press_r = pin->GetOrAddReal("problem/sod", "press_r", 0.1);
+  Real press_r = pin->GetOrAddReal("problem/sod", "pres_r", 0.1);
   Real u_r = pin->GetOrAddReal("problem/sod", "u_r", 0.0);
   Real x_discont = pin->GetOrAddReal("problem/sod", "x_discont", 0.5);
 
