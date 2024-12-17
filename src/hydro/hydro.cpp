@@ -2,6 +2,7 @@
 #include "../main.hpp"
 #include "../recon/dc_simple.hpp"
 #include "../recon/plm_simple.hpp"
+#include "../refinement/refinement.hpp"
 #include "rsolvers/hydro_hllc.hpp"
 #include "rsolvers/hydro_hlle.hpp"
 
@@ -193,6 +194,43 @@ InitializeHydro(ParameterInput *pin) {
 
   auto scratch_level = pin->GetOrAddInteger("hdyro", "scratch_level", 0);
   pkg->AddParam<int>("scratch_level", scratch_level);
+
+  // AMR
+  const auto refine_str = pin->GetOrAddString("refinement", "type", "unset");
+  if (refine_str == "pressure_gradient") {
+    pkg->CheckRefinementBlock = refinement::gradient::PressureGradient;
+    const auto thr =
+        pin->GetOrAddReal("refinement", "threshold_pressure_gradient", 0.0);
+    PARTHENON_REQUIRE(
+        thr > 0.,
+        "Make sure to set refinement/threshold_pressure_gradient >0.");
+    pkg->AddParam<Real>("refinement/threshold_pressure_gradient", thr);
+  } else if (refine_str == "xyvelocity_gradient") {
+    pkg->CheckRefinementBlock = refinement::gradient::VelocityGradient;
+    const auto thr =
+        pin->GetOrAddReal("refinement", "threshold_xyvelosity_gradient", 0.0);
+    PARTHENON_REQUIRE(
+        thr > 0.,
+        "Make sure to set refinement/threshold_xyvelocity_gradient >0.");
+    pkg->AddParam<Real>("refinement/threshold_xyvelocity_gradient", thr);
+  } else if (refine_str == "maxdensity") {
+    pkg->CheckRefinementBlock = refinement::other::MaxDensity;
+    const auto deref_below =
+        pin->GetOrAddReal("refinement", "maxdensity_deref_below", 0.0);
+    const auto refine_above =
+        pin->GetOrAddReal("refinement", "maxdensity_refine_above", 0.0);
+    PARTHENON_REQUIRE(
+        deref_below > 0.,
+        "Make sure to set refinement/maxdensity_deref_below > 0.");
+    PARTHENON_REQUIRE(
+        refine_above > 0.,
+        "Make sure to set refinement/maxdensity_refine_above > 0.");
+    PARTHENON_REQUIRE(deref_below < refine_above,
+                      "Make sure to set refinement/maxdensity_deref_below < "
+                      "refinement/maxdensity_refine_above");
+    pkg->AddParam<Real>("refinement/maxdensity_deref_below", deref_below);
+    pkg->AddParam<Real>("refinement/maxdensity_refine_above", refine_above);
+  }
 
   return pkg;
 }

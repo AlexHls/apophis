@@ -3,6 +3,8 @@ add_executable(
         main.cpp
         apophis_driver.cpp
         hydro/hydro.cpp
+        refinement/gradient.cpp
+        refinement/other.cpp
 )
 
 add_subdirectory(pgen)

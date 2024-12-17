@@ -26,11 +26,12 @@ int main(int argc, char *argv[]) {
       pman.pinput->GetOrAddString("job", "problem_id", "unset");
   if (problem == "sod") {
     pman.app_input->ProblemGenerator = sod::ProblemGenerator;
-
   } else if (problem == "linear_wave") {
     pman.app_input->InitUserMeshData = linear_wave::InitUserMeshData;
     pman.app_input->ProblemGenerator = linear_wave::ProblemGenerator;
     pman.app_input->UserWorkAfterLoop = linear_wave::UserWorkAfterLoop;
+  } else if (problem == "blast") {
+    pman.app_input->ProblemGenerator = blast::ProblemGenerator;
   } else if (problem == "unset") {
     PARTHENON_FAIL("[Apophis]: Problem unset. Exiting.");
   } else {

@@ -18,4 +18,10 @@ void UserWorkAfterLoop(Mesh *mesh, parthenon::ParameterInput *pin,
                        parthenon::SimTime &tm);
 } // namespace linear_wave
 
+namespace blast {
+using namespace parthenon::driver::prelude;
+
+void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin);
+} // namespace blast
+
 #endif // PGEN_PGEN_HPP_
