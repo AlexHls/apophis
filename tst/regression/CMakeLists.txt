@@ -16,3 +16,7 @@ endfunction()
 
 setup_test_both("riemann_hydro" "--driver ${PROJECT_BINARY_DIR}/bin/apophis \
   --driver_input ${PROJECT_SOURCE_DIR}/inputs/sod.in --num_steps 20" "other")
+
+setup_test_both("convergence" "--driver ${PROJECT_BINARY_DIR}/bin/apophis \
+  --driver_input ${PROJECT_SOURCE_DIR}/inputs/linear_wave3d.in --num_steps 12" "convergence")
+

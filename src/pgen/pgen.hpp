@@ -9,4 +9,13 @@ namespace sod {
   void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin);
 } // namespace sod
 
+namespace linear_wave {
+using namespace parthenon::driver::prelude;
+
+void InitUserMeshData(Mesh *, ParameterInput *pin);
+void ProblemGenerator(MeshBlock *pmb, parthenon::ParameterInput *pin);
+void UserWorkAfterLoop(Mesh *mesh, parthenon::ParameterInput *pin,
+                       parthenon::SimTime &tm);
+} // namespace linear_wave
+
 #endif // PGEN_PGEN_HPP_
