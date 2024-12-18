@@ -262,26 +262,28 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
     Real amp = pin->GetReal("problem/kh", "amp");
     Real ofrac = pin->GetReal("problem/kh", "ofrac");
     Real ye = pin->GetReal("problem/kh", "ye");
+    Real rho = 1.0;
     for (int k = kb.s; k <= kb.e; k++) {
       for (int j = jb.s; j <= jb.e; j++) {
         for (int i = ib.s; i <= ib.e; i++) {
-          u(IDN, k, j, i) = 1.0;
+          u(IDN, k, j, i) = rho;
           u(IM1, k, j, i) = vflow + amp * ran(gen);
           u(IM2, k, j, i) = amp * ran(gen);
           u(IM3, k, j, i) = 0.0;
-          for (int n = NHYDRO; n < 7;
+          for (int n = NHYDRO; n < NHYDRO + 7;
                n++) { // TODO(alexhls): replace 7 with ncomp
             u(n, k, j, i) = 0.0;
           }
-          u(NHYDRO + 2, k, j, i) = ofrac;       // O16
-          u(NHYDRO + 3, k, j, i) = 1.0 - ofrac; // Ne20
-          u(NHYDRO + 7, k, j, i) = ye;
+          u(NHYDRO + 2, k, j, i) = ofrac * rho;         // O16
+          u(NHYDRO + 3, k, j, i) = (1.0 - ofrac) * rho; // Ne20
+          u(NHYDRO + 6, k, j, i) = ye * rho;
           if (std::abs(coords.Xc<2>(j)) < 0.25) {
-            u(IDN, k, j, i) = drat;
-            u(IM1, k, j, i) = -drat * (vflow + amp * ran(gen));
-            u(IM2, k, j, i) = drat * amp * ran(gen);
-            u(NHYDRO + 2, k, j, i) = 1.0; // O16
-            u(NHYDRO + 3, k, j, i) = 0.0; // Ne20
+            u(IDN, k, j, i) = drat * rho;
+            u(IM1, k, j, i) = -drat * (vflow + amp * ran(gen)) * rho;
+            u(IM2, k, j, i) = drat * amp * ran(gen) * rho;
+            u(NHYDRO + 2, k, j, i) = 1.0 * drat * rho; // O16
+            u(NHYDRO + 3, k, j, i) = 0.0 * drat * rho; // Ne20
+            u(NHYDRO + 6, k, j, i) = 0.5 * drat * rho; // Ye
           }
           // Pressure scaled to give a sound speed of 1 with gamma=1.4
           u(IEN, k, j, i) =
