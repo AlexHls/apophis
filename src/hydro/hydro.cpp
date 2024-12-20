@@ -2,6 +2,7 @@
 #include "../main.hpp"
 #include "../recon/dc_simple.hpp"
 #include "../recon/plm_simple.hpp"
+#include "../recon/ppm_simple.hpp"
 #include "../refinement/refinement.hpp"
 #include "rsolvers/hydro_hllc.hpp"
 #include "rsolvers/hydro_hlle.hpp"
@@ -56,6 +57,9 @@ InitializeHydro(ParameterInput *pin) {
   } else if (recon_str == "plm") {
     recon = Reconstruction::plm;
     recon_need_ghost = 2;
+  } else if (recon_str == "ppm") {
+    recon = Reconstruction::plm;
+    recon_need_ghost = 3;
   } else {
     PARTHENON_FAIL("[Apophis]: Reconstruction not recognized. Exiting.");
   }
@@ -108,13 +112,19 @@ InitializeHydro(ParameterInput *pin) {
       flux_functions);
   add_flux_fun<Fluid::euler, Reconstruction::plm, RiemannSolver::hllc>(
       flux_functions);
+  add_flux_fun<Fluid::euler, Reconstruction::ppm, RiemannSolver::hllc>(
+      flux_functions);
   add_flux_fun<Fluid::euler, Reconstruction::dc, RiemannSolver::hlle>(
       flux_functions);
   add_flux_fun<Fluid::euler, Reconstruction::plm, RiemannSolver::hlle>(
       flux_functions);
+  add_flux_fun<Fluid::euler, Reconstruction::ppm, RiemannSolver::hlle>(
+      flux_functions);
   add_flux_fun<Fluid::euler, Reconstruction::dc, RiemannSolver::lhllc>(
       flux_functions);
   add_flux_fun<Fluid::euler, Reconstruction::plm, RiemannSolver::lhllc>(
+      flux_functions);
+  add_flux_fun<Fluid::euler, Reconstruction::ppm, RiemannSolver::lhllc>(
       flux_functions);
 
   FluxFun_t *flux_other_stage = nullptr;

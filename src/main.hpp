@@ -28,6 +28,7 @@ enum class Reconstruction {
   undefined,
   dc,
   plm,
+  ppm,
 };
 
 enum class RiemannSolver {
