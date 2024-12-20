@@ -245,7 +245,7 @@ InitializeHydro(ParameterInput *pin) {
   } else if (refine_str == "xyvelocity_gradient") {
     pkg->CheckRefinementBlock = refinement::gradient::VelocityGradient;
     const auto thr =
-        pin->GetOrAddReal("refinement", "threshold_xyvelosity_gradient", 0.0);
+        pin->GetOrAddReal("refinement", "threshold_xyvelocity_gradient", 0.0);
     PARTHENON_REQUIRE(
         thr > 0.,
         "Make sure to set refinement/threshold_xyvelocity_gradient >0.");
