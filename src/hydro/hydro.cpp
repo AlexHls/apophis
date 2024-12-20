@@ -5,6 +5,7 @@
 #include "../refinement/refinement.hpp"
 #include "rsolvers/hydro_hllc.hpp"
 #include "rsolvers/hydro_hlle.hpp"
+#include "rsolvers/hydro_lhllc.hpp"
 
 #include "basic_types.hpp"
 #include "interface/state_descriptor.hpp"
@@ -92,6 +93,8 @@ InitializeHydro(ParameterInput *pin) {
     riemann = RiemannSolver::hllc;
   } else if (riemann_str == "hlle") {
     riemann = RiemannSolver::hlle;
+  } else if (riemann_str == "lhllc") {
+    riemann = RiemannSolver::lhllc;
   } else {
     PARTHENON_FAIL("[Apophis]: Riemann solver not recognized. Exiting.");
   }
@@ -108,6 +111,10 @@ InitializeHydro(ParameterInput *pin) {
   add_flux_fun<Fluid::euler, Reconstruction::dc, RiemannSolver::hlle>(
       flux_functions);
   add_flux_fun<Fluid::euler, Reconstruction::plm, RiemannSolver::hlle>(
+      flux_functions);
+  add_flux_fun<Fluid::euler, Reconstruction::dc, RiemannSolver::lhllc>(
+      flux_functions);
+  add_flux_fun<Fluid::euler, Reconstruction::plm, RiemannSolver::lhllc>(
       flux_functions);
 
   FluxFun_t *flux_other_stage = nullptr;

@@ -34,6 +34,7 @@ enum class RiemannSolver {
   undefined,
   hlle,
   hllc,
+  lhllc,
 };
 
 enum class Integrator {
