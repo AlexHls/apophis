@@ -173,11 +173,21 @@ InitializeHydro(ParameterInput *pin) {
     comp_abar = {4.0, 12.0, 16.0, 20.0, 30.0, 56.0};
     comp_zbar = {2.0, 6.0, 8.0, 10.0, 15.0, 28.0};
   }
-  pkg->AddParam<int>("nscalars", nscalars);
   pkg->AddParam<int>("ncomp", ncomp);
   pkg->AddParam<std::vector<std::string>>("comp_labels", comp_labels);
   pkg->AddParam<std::vector<Real>>("comp_abar", comp_abar);
   pkg->AddParam<std::vector<Real>>("comp_zbar", comp_zbar);
+
+  // Levelset
+  auto nlset = pin->GetOrAddInteger("hydro", "nlset", 0);
+  if (nlset > 0 && ncomp < 1) {
+    PARTHENON_FAIL(
+        "[Apophis]: Levelset is enabled but no composition is set. Exiting.");
+  }
+  nscalars += nlset;
+  pkg->AddParam<int>("nlset", nlset);
+
+  pkg->AddParam<int>("nscalars", nscalars);
 
   // Add fields
   std::string field_name = "cons";
@@ -192,6 +202,11 @@ InitializeHydro(ParameterInput *pin) {
   }
   if (ncomp > 0) {
     cons_labels.push_back("scalar_density_ye");
+  }
+  if (nlset > 0) {
+    for (int i = 0; i < nlset; i++) {
+      cons_labels.push_back("scalar_density_lset" + std::to_string(i));
+    }
   }
   parthenon::Metadata m(
       {parthenon::Metadata::Cell, parthenon::Metadata::Independent,
@@ -211,6 +226,11 @@ InitializeHydro(ParameterInput *pin) {
   }
   if (ncomp > 0) {
     prim_labels.push_back("scalar_ye");
+  }
+  if (nlset > 0) {
+    for (int i = 0; i < nlset; i++) {
+      prim_labels.push_back("scalar_lset" + std::to_string(i));
+    }
   }
   m = parthenon::Metadata(
       {parthenon::Metadata::Cell, parthenon::Metadata::Derived},
