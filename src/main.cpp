@@ -34,6 +34,8 @@ int main(int argc, char *argv[]) {
     pman.app_input->ProblemGenerator = blast::ProblemGenerator;
   } else if (problem == "kh") {
     pman.app_input->ProblemGenerator = kh::ProblemGenerator;
+  } else if (problem == "burn_tube") {
+    pman.app_input->ProblemGenerator = burn_tube::ProblemGenerator;
   } else if (problem == "unset") {
     PARTHENON_FAIL("[Apophis]: Problem unset. Exiting.");
   } else {
