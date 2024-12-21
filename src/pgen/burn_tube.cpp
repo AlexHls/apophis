@@ -16,7 +16,7 @@ namespace burn_tube {
 
 void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
   Real rho_u = pin->GetOrAddReal("problem", "rho_u", 5.0e8);
-  Real temp_u = pin->GetOrAddReal("problem", "temp_u", 1.0e9);
+  Real temp_u = pin->GetOrAddReal("problem", "temp_u", 1.0e8);
   Real temp_b = pin->GetOrAddReal("problem", "temp_b", 9.0e9);
   Real x1 = pin->GetOrAddReal("problem", "x1", 0.0);
   Real x2 = pin->GetOrAddReal("problem", "x2", 0.0);

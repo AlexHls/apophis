@@ -61,7 +61,7 @@ threshold_pressure_gradient  = 0.1
 
 <problem>
 rho_u = 5.0e8
-temp_u = 1.0e9
+temp_u = 0.1e9
 temp_b = 9.0e9
 x1 = 2.0e7
 x2 = 4.0e7
