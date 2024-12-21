@@ -72,23 +72,6 @@ InitializeHydro(ParameterInput *pin) {
 
   pkg->AddParam<>("reconstruction", recon);
 
-  // Equation of state
-  const auto eos_str = pin->GetOrAddString("eos", "type", "ideal");
-  if (eos_str == "ideal") {
-    const Real gm1_in = pin->GetOrAddReal("eos", "gm1", 0.6666667);
-    const Real cv_in = pin->GetOrAddReal("eos", "cv", 1.5);
-    singularity::EOS eos = singularity::IdealGas(gm1_in, cv_in);
-    singularity::EOS eos_device = eos.GetOnDevice();
-    pkg->AddParam<>("eos", eos_device);
-    pkg->AddParam<>("eos_host", eos);
-    pkg->AddParam<>("update_lambda", false);
-  } else {
-    PARTHENON_FAIL("[Apophis]: EOS not recognized. Exiting.");
-  }
-
-  pkg->FillDerivedMesh = ConsToPrim<singularity::EOS>;
-  pkg->EstimateTimestepMesh = EstimateTimestep<Fluid::euler>;
-
   // Riemann solver
   const auto riemann_str = pin->GetString("hydro", "riemann");
   auto riemann = RiemannSolver::undefined;
@@ -257,6 +240,43 @@ InitializeHydro(ParameterInput *pin) {
       std::vector<int>({2}), gamma_labels);
   pkg->AddField(field_name, m);
 
+  // Equation of state
+  const auto eos_str = pin->GetOrAddString("eos", "type", "ideal");
+  if (eos_str == "ideal") {
+    const Real gm1_in = pin->GetOrAddReal("eos", "gm1", 0.6666667);
+    const Real cv_in = pin->GetOrAddReal("eos", "cv", 1.5);
+    singularity::EOS eos = singularity::IdealGas(gm1_in, cv_in);
+    singularity::EOS eos_device = eos.GetOnDevice();
+    pkg->AddParam<>("eos", eos_device);
+    pkg->AddParam<>("eos_host", eos);
+    pkg->AddParam<>("update_lambda", false);
+  } else if (eos_str == "helm") {
+    if (ncomp < 1) {
+      PARTHENON_FAIL(
+          "[Apophis]: Helmholtz EOS is enabled but no composition is set. "
+          "Exiting.");
+    }
+    const bool eos_rad = pin->GetOrAddReal("eos", "radiation", 1);
+    const bool eos_gas = pin->GetOrAddReal("eos", "gas", 1);
+    const bool eos_coulomb = pin->GetOrAddReal("eos", "coulomb", 1);
+    const bool eos_ionized = pin->GetOrAddReal("eos", "ionized", 1);
+    const bool eos_degenerate = pin->GetOrAddReal("eos", "degenerate", 1);
+    std::string helm_table_file =
+        pin->GetOrAddString("eos", "helm_table", "helm_table.dat");
+    singularity::EOS eos =
+        singularity::Helmholtz(helm_table_file, eos_rad, eos_gas, eos_coulomb,
+                               eos_ionized, eos_degenerate);
+    singularity::EOS eos_device = eos.GetOnDevice();
+    pkg->AddParam<>("eos", eos_device);
+    pkg->AddParam<>("eos_host", eos);
+    pkg->AddParam<>("update_lambda", true);
+  } else {
+    PARTHENON_FAIL("[Apophis]: EOS not recognized. Exiting.");
+  }
+
+  pkg->FillDerivedMesh = ConsToPrim<singularity::EOS>;
+  pkg->EstimateTimestepMesh = EstimateTimestep<Fluid::euler>;
+
   // Misc
   Real dfloor =
       pin->GetOrAddReal("hydro", "dfloor", std::sqrt(1024 * float_min));
@@ -406,6 +426,7 @@ template <class T> void ConsToPrim(MeshData<Real> *md) {
   bool update_lambda = pmb->packages.Get("Hydro")->Param<bool>("update_lambda");
 
   const auto nscalars = pmb->packages.Get("Hydro")->Param<int>("nscalars");
+  const auto ncomp = pmb->packages.Get("Hydro")->Param<int>("ncomp");
 
   // Temperature limits for root finding & initial guess
   static constexpr int ilTMin_ = 3;
@@ -428,6 +449,7 @@ template <class T> void ConsToPrim(MeshData<Real> *md) {
         Real &u_m2 = cons(IM2, k, j, i);
         Real &u_m3 = cons(IM3, k, j, i);
         Real &u_e = cons(IEN, k, j, i);
+        Real &u_ye = cons(NHYDRO + ncomp, k, j, i);
 
         Real &w_d = prim(IDN, k, j, i);
         Real &w_vx = prim(IV1, k, j, i);
@@ -460,8 +482,10 @@ template <class T> void ConsToPrim(MeshData<Real> *md) {
         }
         if (update_lambda) {
 
-          Real ab = 0.0;
-          Real zb = 0.0;
+          // We don't need the actual abar and zbar, they just need to yield
+          // the correct ye value
+          abar = 16.0;
+          zbar = abar * u_ye * di;
 
           Real lambda_tmp[3] = {abar, zbar, lT};
 

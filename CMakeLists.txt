@@ -18,6 +18,8 @@ add_subdirectory(submodules/parthenon)
 
 # Singularity-EOS
 add_subdirectory(submodules/singularity-eos)
+set(SINGULARITY_USE_SPINER ON CACHE BOOL "Use Spiner for Singularity-EOS")
+set(SINGULARITY_USE_HELMHOLTZ ON CACHE BOOL "Use Helmholtz EOS for Singularity-EOS")
 
 if (Apophis_ENABLE_TESTING)
   include(CTest)

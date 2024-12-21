@@ -51,9 +51,13 @@ gamma = 1.666666666666667 # gamma = C_p/C_v
 scratch_level = 0 # 0 is actual scratch (tiny); 1 is HBM
 
 <eos>
-eos_type = ideal
-gm1 = 0.66666666667
-Cv = 1.5
+eos_type = helm
+radiation = 1
+gas = 1
+coulomb = 1
+ionized = 1
+degenerate = 1
+helm_table = ../data/helm_table.dat
 
 <refinement>
 type                         = pressure_gradient
