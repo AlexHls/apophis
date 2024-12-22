@@ -20,7 +20,7 @@ enum {
 };
 
 enum {
-  LIVB = 0, // vburn
+  LIFL = 0, // fuel
   LIDST = 1, // dist
 };
 

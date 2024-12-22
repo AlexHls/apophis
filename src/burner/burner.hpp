@@ -1,6 +1,8 @@
 #ifndef BURNER_BURNER_HPP_
 #define BURNER_BURNER_HPP_
 
+#define DENS_THRESH 1.0e5
+
 #include "parthenon/parthenon.hpp"
 
 using namespace parthenon::package::prelude;

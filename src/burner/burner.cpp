@@ -21,6 +21,17 @@ TaskStatus Burn(std::shared_ptr<MeshData<Real>> &md, const int lset_id,
   auto jb = cellbounds.GetBoundsJ(IndexDomain::interior);
   auto kb = cellbounds.GetBoundsK(IndexDomain::interior);
 
+  const auto &comp_ebind = hydro_pkg->Param<std::vector<Real>>("comp_ebind");
+
+  int il, iu, jl, ju, kl, ku;
+  jl = jb.s, ju = jb.e, kl = kb.s, ku = kb.e;
+  if (pmb->block_size.nx(X2DIR) > 1) {
+    if (pmb->block_size.nx(X3DIR) == 1) // 2D
+      jl = jb.s - 1, ju = jb.e + 1, kl = kb.s, ku = kb.e;
+    else // 3D
+      jl = jb.s - 1, ju = jb.e + 1, kl = kb.s - 1, ku = kb.e + 1;
+  }
+
   const auto nscalars = hydro_pkg->Param<int>("nscalars");
   const auto ncomp = hydro_pkg->Param<int>("ncomp");
   const int lset_idx = NHYDRO + ncomp + 1 + lset_id; // 1 for ye
@@ -30,8 +41,8 @@ TaskStatus Burn(std::shared_ptr<MeshData<Real>> &md, const int lset_id,
 
   const auto ndim_ = cons_pack.GetNdim();
   pmb->par_for(
-      "Levelset gradient", 0, cons_pack.GetDim(5) - 1, kb.s, kb.e, jb.s, jb.e,
-      ib.s, ib.e,
+      "Levelset advection", 0, cons_pack.GetDim(5) - 1, kl, ku, jl, ju,
+      ib.s - 1, ib.e + 1,
       KOKKOS_LAMBDA(const int b, const int k, const int j, const int i) {
         auto &cons = cons_pack(b);
         const auto &coords = prim_pack.GetCoords(b);
@@ -109,6 +120,75 @@ TaskStatus Burn(std::shared_ptr<MeshData<Real>> &md, const int lset_id,
         p_lset = p_lset + 0.5 * std::sqrt(h) * vburn * dt;
         u_lset = p_lset * u_d;
       });
+
+  pmb->par_for(
+      "Burn", 0, cons_pack.GetDim(5) - 1, kl, ku, jl, ju, ib.s - 1, ib.e + 1,
+      KOKKOS_LAMBDA(const int b, const int k, const int j, const int i) {
+        auto &cons = cons_pack(b);
+        auto &lset = lset_pack(b);
+
+        Real &u_d = cons(IDN, k, j, i);
+        Real &u_e = cons(IEN, k, j, i);
+
+        Real di = 1.0 / u_d;
+
+        // TODO(alexhls): Make this more flexible for other fuel types
+        Real &u_xo16 = cons(NHYDRO + 2, k, j, i);
+        Real &u_xneon = cons(NHYDRO + 3, k, j, i);
+        Real &u_ime = cons(NHYDRO + 4, k, j, i);
+        Real &u_xni56 = cons(NHYDRO + 5, k, j, i);
+
+        Real xo15_ini = u_xo16 * di;
+        Real neon_ini = u_xneon * di;
+
+        Real ni56_ini = u_xni56 * di;
+
+        Real &xfuel = lset(LIFL, k, j, i);
+        bool conv_flag = false;
+
+        Real oldenergy = 0.0;
+        for (int n = NHYDRO; n < NHYDRO + ncomp; n++) {
+          oldenergy += cons(n, k, j, i) * comp_ebind[n - NHYDRO];
+        }
+
+        // TODO(alexhls): Get the actual alpha value
+        Real alpha = 2.0;
+        if (cons(lset_idx, k, j, i) > 0.0) {
+          alpha = 0.0;
+        }
+
+        // TODO(alexhls): Replace this with a burndens check as is
+        // done in LEAFS. Also get threshold from table.
+        if (u_d > DENS_THRESH) {
+          Real conversion = std::max(0.0, xfuel - alpha);
+          xfuel = std::min(1.0, std::max(0.0, xfuel - conversion));
+          if (conversion > 0.0) {
+            conv_flag = true;
+            //  TODO: Make this more accurate to account for partial burning
+            //  of a cell
+            u_xo16 = 0.0;
+            u_xneon = 0.0;
+            u_xni56 = 1.0 * u_d;
+          }
+        }
+
+        // Release energy
+        if (conv_flag) {
+          Real xsum = 0.0;
+          Real newenergy = 0.0;
+          for (int n = NHYDRO; n < NHYDRO + ncomp; n++) {
+            xsum += cons(n, k, j, i) / u_d;
+          }
+          // Note: This doesn't do anything yet since we burn everything
+          // to Ni56.
+          u_ime = std::max(0.0, 1.0 - xsum) * u_d;
+          for (int n = NHYDRO; n < NHYDRO + ncomp; n++) {
+            newenergy += cons(n, k, j, i) * comp_ebind[n - NHYDRO];
+          }
+          u_e += (newenergy - oldenergy);
+        }
+      });
+
   return TaskStatus::complete;
 }
 } // namespace Apophis

@@ -149,17 +149,21 @@ InitializeHydro(ParameterInput *pin) {
   std::vector<std::string> comp_labels;
   std::vector<Real> comp_abar;
   std::vector<Real> comp_zbar;
+  std::vector<Real> comp_ebind;
   if (comp_str == "ONe") {
     nscalars += 7; // 6 for species + 1 for electron fraction
     ncomp = 6;
     comp_labels = {"alpha", "C12", "O16", "Ne20", "IME", "IGE"};
     comp_abar = {4.0, 12.0, 16.0, 20.0, 30.0, 56.0};
     comp_zbar = {2.0, 6.0, 8.0, 10.0, 15.0, 28.0};
+    comp_ebind = {6.8266e+18,  7.41121e+18, 7.69691e+18,
+                  7.74994e+18, 8.17906e+18, 8.34e+18};
   }
   pkg->AddParam<int>("ncomp", ncomp);
   pkg->AddParam<std::vector<std::string>>("comp_labels", comp_labels);
   pkg->AddParam<std::vector<Real>>("comp_abar", comp_abar);
   pkg->AddParam<std::vector<Real>>("comp_zbar", comp_zbar);
+  pkg->AddParam<std::vector<Real>>("comp_ebind", comp_ebind);
 
   // Levelset
   auto nlset = pin->GetOrAddInteger("hydro", "nlset", 0);
@@ -220,16 +224,16 @@ InitializeHydro(ParameterInput *pin) {
       std::vector<int>({NHYDRO + nscalars}), prim_labels);
   pkg->AddField(field_name, m);
 
-  if (nlset > 1) {
+  if (nlset > 0) {
     for (int i = 0; i < nlset; i++) {
       field_name = "lset" + std::to_string(i);
       std::vector<std::string> lset_labels(2);
-      lset_labels[LIVB] = "vburn";
+      lset_labels[LIFL] = "fuel";
       lset_labels[LIDST] = "dist";
       m = parthenon::Metadata(
           {parthenon::Metadata::Cell, parthenon::Metadata::Derived,
            parthenon::Metadata::Intensive, parthenon::Metadata::FillGhost},
-          std::vector<int>({nlset}), lset_labels);
+          std::vector<int>({2}), lset_labels);
       pkg->AddField(field_name, m);
     }
   }
