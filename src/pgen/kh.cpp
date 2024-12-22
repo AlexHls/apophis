@@ -285,6 +285,8 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
             u(NHYDRO + 3, k, j, i) = 0.0 * drat * rho; // Ne20
             u(NHYDRO + 6, k, j, i) = 0.5 * drat * rho; // Ye
           }
+          u(NHYDRO + 7, k, j, i) =
+              (0.25 - std::abs(coords.Xc<2>(j))) * u(IDN, k, j, i); // lset1
           // Pressure scaled to give a sound speed of 1 with gamma=1.4
           u(IEN, k, j, i) =
               2.5 / gm1 + 0.5 * (SQR(u(IM1, k, j, i)) + SQR(u(IM2, k, j, i))) /

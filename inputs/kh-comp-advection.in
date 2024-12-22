@@ -56,6 +56,7 @@ ncycle_out_mesh = -1000
 <hydro>
 riemann = hllc
 reconstruction = plm
+nlset = 1
 gamma = 1.666666666666667 # gamma = C_p/C_v
 scratch_level = 0 # 0 is actual scratch (tiny); 1 is HBM
 composition = ONe

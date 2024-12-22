@@ -23,6 +23,7 @@ TaskStatus Burn(std::shared_ptr<MeshData<Real>> &md, const int lset_id,
 
   const auto nscalars = hydro_pkg->Param<int>("nscalars");
   const auto ncomp = hydro_pkg->Param<int>("ncomp");
+  const int lset_idx = NHYDRO + ncomp + 1 + lset_id; // 1 for ye
 
   auto &lset_pack = md->PackVariables(
       std::vector<std::string>{"lset" + std::to_string(lset_id)});
@@ -47,10 +48,10 @@ TaskStatus Burn(std::shared_ptr<MeshData<Real>> &md, const int lset_id,
         Real &u_dp1 = cons(IDN, k, j, i + 1);
         Real &u_dm1 = cons(IDN, k, j, i - 1);
 
-        Real &u_lset = cons(NHYDRO + ncomp + lset_id, k, j, i);
+        Real &u_lset = cons(lset_idx, k, j, i);
         Real p_lset = u_lset / u_d;
-        Real p_lset_p1 = cons(NHYDRO + ncomp + lset_id, k, j, i + 1) / u_dp1;
-        Real p_lset_m1 = cons(NHYDRO + ncomp + lset_id, k, j, i - 1) / u_dm1;
+        Real p_lset_p1 = cons(lset_idx, k, j, i + 1) / u_dp1;
+        Real p_lset_m1 = cons(lset_idx, k, j, i - 1) / u_dm1;
 
         lgrad = (p_lset - p_lset_m1) /
                 (coords.Xc<X1DIR>(k, j, i) - coords.Xc<X1DIR>(k, j, i - 1));
@@ -67,8 +68,8 @@ TaskStatus Burn(std::shared_ptr<MeshData<Real>> &md, const int lset_id,
           Real &u_dp1 = cons(IDN, k, j + 1, i);
           Real &u_dm1 = cons(IDN, k, j - 1, i);
 
-          p_lset_p1 = cons(NHYDRO + ncomp + lset_id, k, j + 1, i) / u_dp1;
-          p_lset_m1 = cons(NHYDRO + ncomp + lset_id, k, j - 1, i) / u_dm1;
+          p_lset_p1 = cons(lset_idx, k, j + 1, i) / u_dp1;
+          p_lset_m1 = cons(lset_idx, k, j - 1, i) / u_dm1;
 
           lgrad = (p_lset - p_lset_m1) /
                   (coords.Xc<X2DIR>(k, j, i) - coords.Xc<X2DIR>(k, j - 1, i));
@@ -86,8 +87,8 @@ TaskStatus Burn(std::shared_ptr<MeshData<Real>> &md, const int lset_id,
           Real &u_dp1 = cons(IDN, k + 1, j, i);
           Real &u_dm1 = cons(IDN, k - 1, j, i);
 
-          p_lset_p1 = cons(NHYDRO + ncomp + lset_id, k + 1, j, i) / u_dp1;
-          p_lset_m1 = cons(NHYDRO + ncomp + lset_id, k - 1, j, i) / u_dm1;
+          p_lset_p1 = cons(lset_idx, k + 1, j, i) / u_dp1;
+          p_lset_m1 = cons(lset_idx, k - 1, j, i) / u_dm1;
 
           lgrad = (p_lset - p_lset_m1) /
                   (coords.Xc<X3DIR>(k, j, i) - coords.Xc<X3DIR>(k - 1, j, i));

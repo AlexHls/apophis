@@ -463,7 +463,6 @@ template <class T> void ConsToPrim(MeshData<Real> *md) {
         Real &u_m2 = cons(IM2, k, j, i);
         Real &u_m3 = cons(IM3, k, j, i);
         Real &u_e = cons(IEN, k, j, i);
-        Real &u_ye = cons(NHYDRO + ncomp, k, j, i);
 
         Real &w_d = prim(IDN, k, j, i);
         Real &w_vx = prim(IV1, k, j, i);
@@ -498,6 +497,7 @@ template <class T> void ConsToPrim(MeshData<Real> *md) {
 
           // We don't need the actual abar and zbar, they just need to yield
           // the correct ye value
+          Real &u_ye = cons(NHYDRO + ncomp, k, j, i);
           abar = 16.0;
           zbar = abar * u_ye * di;
 
