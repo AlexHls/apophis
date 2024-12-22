@@ -19,6 +19,11 @@ enum {
   IPR = 4,
 };
 
+enum {
+  LIVB = 0, // vburn
+  LIDST = 1, // dist
+};
+
 enum class Fluid {
   undefined,
   euler,

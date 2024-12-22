@@ -5,6 +5,7 @@ add_executable(
         hydro/hydro.cpp
         refinement/gradient.cpp
         refinement/other.cpp
+        burner/burner.cpp
 )
 
 add_subdirectory(pgen)

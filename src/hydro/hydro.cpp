@@ -220,6 +220,20 @@ InitializeHydro(ParameterInput *pin) {
       std::vector<int>({NHYDRO + nscalars}), prim_labels);
   pkg->AddField(field_name, m);
 
+  if (nlset > 1) {
+    for (int i = 0; i < nlset; i++) {
+      field_name = "lset" + std::to_string(i);
+      std::vector<std::string> lset_labels(2);
+      lset_labels[LIVB] = "vburn";
+      lset_labels[LIDST] = "dist";
+      m = parthenon::Metadata(
+          {parthenon::Metadata::Cell, parthenon::Metadata::Derived,
+           parthenon::Metadata::Intensive, parthenon::Metadata::FillGhost},
+          std::vector<int>({nlset}), lset_labels);
+      pkg->AddField(field_name, m);
+    }
+  }
+
   field_name = "eos_lambda";
   std::vector<std::string> eos_lambda_labels(3);
   eos_lambda_labels[0] = "Abar";
