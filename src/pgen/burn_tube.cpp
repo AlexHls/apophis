@@ -41,7 +41,6 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
 
   // initialize conserved variables
   auto &u = pmb->meshblock_data.Get()->Get("cons").data;
-  auto &lset = pmb->meshblock_data.Get()->Get("lset0").data;
   auto &coords = pmb->coords;
   // setup uniform ambient medium with spherical over-pressured region
   pmb->par_for(
@@ -71,7 +70,7 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
         u(NHYDRO + 3, k, j, i) = (1.0 - ofrac) * rho_u; // Ne20
         u(NHYDRO + 6, k, j, i) = ye * rho_u;
 
-        lset(LIFL, k, j, i) = 1.0;
+        u(NHYDRO + 8, k, j, i) = 1.0 * rho_u;
 
         // TODO(alexhls): Make this more flexible for different
         // ignition bubble setups
@@ -91,7 +90,7 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
           u(NHYDRO + 2, k, j, i) = 0.0;
           u(NHYDRO + 3, k, j, i) = 0.0;
           u(NHYDRO + 5, k, j, i) = 1.0 * rho_u;
-          lset(LIFL, k, j, i) = 0.0;
+          u(NHYDRO + 8, k, j, i) = 0.0;
           ;
         }
       });

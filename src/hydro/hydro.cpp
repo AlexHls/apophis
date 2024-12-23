@@ -171,7 +171,7 @@ InitializeHydro(ParameterInput *pin) {
     PARTHENON_FAIL(
         "[Apophis]: Levelset is enabled but no composition is set. Exiting.");
   }
-  nscalars += nlset;
+  nscalars += nlset * 2;
   pkg->AddParam<int>("nlset", nlset);
 
   pkg->AddParam<int>("nscalars", nscalars);
@@ -193,6 +193,7 @@ InitializeHydro(ParameterInput *pin) {
   if (nlset > 0) {
     for (int i = 0; i < nlset; i++) {
       cons_labels.push_back("scalar_density_lset" + std::to_string(i));
+      cons_labels.push_back("scalar_density_xfuel" + std::to_string(i));
     }
   }
   parthenon::Metadata m(
@@ -217,6 +218,7 @@ InitializeHydro(ParameterInput *pin) {
   if (nlset > 0) {
     for (int i = 0; i < nlset; i++) {
       prim_labels.push_back("scalar_lset" + std::to_string(i));
+      prim_labels.push_back("scalar_xfuel" + std::to_string(i));
     }
   }
   m = parthenon::Metadata(

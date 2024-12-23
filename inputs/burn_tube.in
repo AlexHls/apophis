@@ -33,7 +33,7 @@ nx2=16
 nx3=1
 
 <parthenon/time>
-integrator = rk1
+integrator = rk2
 cfl = 0.4
 dt_init = 1.0e-5
 tlim = 0.5

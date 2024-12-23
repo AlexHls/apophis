@@ -143,7 +143,8 @@ TaskStatus Burn(std::shared_ptr<MeshData<Real>> &md, const int lset_id,
 
         Real ni56_ini = u_xni56 * di;
 
-        Real &xfuel = lset(LIFL, k, j, i);
+        Real &u_xfuel = cons(lset_idx + 1, k, j, i);
+        Real xfuel = u_xfuel * di;
         bool conv_flag = false;
 
         Real oldenergy = 0.0;
@@ -170,6 +171,7 @@ TaskStatus Burn(std::shared_ptr<MeshData<Real>> &md, const int lset_id,
             u_xneon = 0.0;
             u_xni56 = 1.0 * u_d;
           }
+          u_xfuel = xfuel * u_d;
         }
 
         // Release energy
