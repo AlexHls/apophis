@@ -8,9 +8,10 @@ problem_id = kh
 iprob  = 6
 drat   = 0.1
 amp    = 0.01            # amplitude of initial vy perturbation
-vflow  = 1.0             # relative shear velocity of 2x interfaces
+vflow  = 1.0            # relative shear velocity of 2x interfaces
 ofrac  = 0.65
 ye     = 0.4983
+pamp   = 2.5
 
 <refinement>
 type                     = unset
@@ -18,7 +19,7 @@ type                     = unset
 threshold_xyvelocity_gradient  = 0.001
 
 <parthenon/mesh>
-refinement = none
+refinement = adaptive
 numlevel = 3
 nghost = 2
 
@@ -46,7 +47,7 @@ nx2=128
 nx3=1
 
 <parthenon/time>
-integrator = vl2
+integrator = rk2
 cfl = 0.4
 tlim = 1.0
 nlim = 100000
@@ -69,4 +70,4 @@ Cv = 1.5
 <parthenon/output0>
 file_type = hdf5
 dt = 0.05
-variables = prim
+variables = prim,gamma
