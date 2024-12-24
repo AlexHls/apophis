@@ -8,7 +8,7 @@
 #include <parthenon/package.hpp>
 
 #include "../main.hpp"
-#include "singularity-eos/eos/eos.hpp"
+#include "../hydro/hydro.hpp"
 
 using namespace parthenon::package::prelude;
 
@@ -30,7 +30,7 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
   Real ye = pin->GetOrAddReal("problem", "ye", 0.5);
 
   const auto &eos =
-      pmb->packages.Get("Hydro")->Param<singularity::EOS>("eos_host");
+      pmb->packages.Get("Hydro")->Param<Apophis::EOS_t>("eos_host");
   Real abar = 16.0;
   Real zbar = abar * ye;
   Real lT = 7.0;

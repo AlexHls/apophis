@@ -47,6 +47,7 @@ CMakeUserPresets.json
 
 # build directory
 build/
+build*/
 
 # Cache
 .cache/

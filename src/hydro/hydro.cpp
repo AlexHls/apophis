@@ -12,7 +12,6 @@
 #include "interface/state_descriptor.hpp"
 #include "kokkos_abstraction.hpp"
 #include "parthenon/parthenon.hpp"
-#include "singularity-eos/eos/eos.hpp"
 #include <parthenon/package.hpp>
 
 using parthenon::DevExecSpace;
@@ -265,8 +264,8 @@ InitializeHydro(ParameterInput *pin) {
   if (eos_str == "ideal") {
     const Real gm1_in = pin->GetOrAddReal("eos", "gm1", 0.6666667);
     const Real cv_in = pin->GetOrAddReal("eos", "cv", 1.5);
-    singularity::EOS eos = singularity::IdealGas(gm1_in, cv_in);
-    singularity::EOS eos_device = eos.GetOnDevice();
+    EOS_t eos = singularity::IdealGas(gm1_in, cv_in);
+    EOS_t eos_device = eos.GetOnDevice();
     pkg->AddParam<>("eos", eos_device);
     pkg->AddParam<>("eos_host", eos);
     pkg->AddParam<>("update_lambda", false);
@@ -283,10 +282,10 @@ InitializeHydro(ParameterInput *pin) {
     const bool eos_degenerate = pin->GetOrAddReal("eos", "degenerate", 1);
     std::string helm_table_file =
         pin->GetOrAddString("eos", "helm_table", "helm_table.dat");
-    singularity::EOS eos =
+    EOS_t eos =
         singularity::Helmholtz(helm_table_file, eos_rad, eos_gas, eos_coulomb,
                                eos_ionized, eos_degenerate);
-    singularity::EOS eos_device = eos.GetOnDevice();
+    EOS_t eos_device = eos.GetOnDevice();
     pkg->AddParam<>("eos", eos_device);
     pkg->AddParam<>("eos_host", eos);
     pkg->AddParam<>("update_lambda", true);
@@ -294,7 +293,7 @@ InitializeHydro(ParameterInput *pin) {
     PARTHENON_FAIL("[Apophis]: EOS not recognized. Exiting.");
   }
 
-  pkg->FillDerivedMesh = ConsToPrim<singularity::EOS>;
+  pkg->FillDerivedMesh = ConsToPrim<EOS_t>;
   pkg->EstimateTimestepMesh = EstimateTimestep<Fluid::euler>;
 
   // Misc
@@ -358,7 +357,7 @@ template <Fluid fluid> Real EstimateTimestep(MeshData<Real> *md) {
   const auto &cons_pack = md->PackVariables(std::vector<std::string>{"cons"});
   const auto &eos_lambda_pack =
       md->PackVariables(std::vector<std::string>{"eos_lambda"});
-  const auto &eos_ = hydro_pkg->Param<singularity::EOS>("eos");
+  const auto &eos_ = hydro_pkg->Param<EOS_t>("eos");
 
   IndexRange ib = md->GetBlockData(0)->GetBoundsI(IndexDomain::interior);
   IndexRange jb = md->GetBlockData(0)->GetBoundsJ(IndexDomain::interior);
@@ -564,7 +563,7 @@ TaskStatus CalculateFluxes(std::shared_ptr<MeshData<Real>> &md) {
   const int nhydro = pkg->Param<int>("nhydro");
   const int nscalars = pkg->Param<int>("nscalars");
 
-  const auto &eos = pkg->Param<singularity::EOS>("eos");
+  const auto &eos = pkg->Param<EOS_t>("eos");
 
   auto num_scratch_vars = nhydro + nscalars;
   auto prim_list = std::vector<std::string>({"prim"});
