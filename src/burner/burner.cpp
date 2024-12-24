@@ -21,9 +21,7 @@ TaskStatus Burn(std::shared_ptr<MeshData<Real>> &md, const int lset_id,
   auto jb = cellbounds.GetBoundsJ(IndexDomain::interior);
   auto kb = cellbounds.GetBoundsK(IndexDomain::interior);
 
-  const auto &comp_ebind = hydro_pkg->Param<std::vector<Real>>("comp_ebind");
-
-  int il, iu, jl, ju, kl, ku;
+  int jl, ju, kl, ku;
   jl = jb.s, ju = jb.e, kl = kb.s, ku = kb.e;
   if (pmb->block_size.nx(X2DIR) > 1) {
     if (pmb->block_size.nx(X3DIR) == 1) // 2D
@@ -125,7 +123,6 @@ TaskStatus Burn(std::shared_ptr<MeshData<Real>> &md, const int lset_id,
       "Burn", 0, cons_pack.GetDim(5) - 1, kl, ku, jl, ju, ib.s - 1, ib.e + 1,
       KOKKOS_LAMBDA(const int b, const int k, const int j, const int i) {
         auto &cons = cons_pack(b);
-        auto &lset = lset_pack(b);
 
         Real &u_d = cons(IDN, k, j, i);
         Real &u_e = cons(IEN, k, j, i);
@@ -149,7 +146,8 @@ TaskStatus Burn(std::shared_ptr<MeshData<Real>> &md, const int lset_id,
 
         Real oldenergy = 0.0;
         for (int n = NHYDRO; n < NHYDRO + ncomp; n++) {
-          oldenergy += cons(n, k, j, i) * comp_ebind[n - NHYDRO];
+          Real ebind = GetEBind<Fluid::euler>(n - NHYDRO);
+          oldenergy += cons(n, k, j, i) * ebind;
         }
 
         // TODO(alexhls): Get the actual alpha value
@@ -185,7 +183,8 @@ TaskStatus Burn(std::shared_ptr<MeshData<Real>> &md, const int lset_id,
           // to Ni56.
           u_ime = std::max(0.0, 1.0 - xsum) * u_d;
           for (int n = NHYDRO; n < NHYDRO + ncomp; n++) {
-            newenergy += cons(n, k, j, i) * comp_ebind[n - NHYDRO];
+            Real ebind = GetEBind<Fluid::euler>(n - NHYDRO);
+            newenergy += cons(n, k, j, i) * ebind;
           }
           u_e += (newenergy - oldenergy);
         }
