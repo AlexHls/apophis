@@ -446,6 +446,8 @@ template <class T> void ConsToPrim(MeshData<Real> *md) {
 
   const auto nscalars = pmb->packages.Get("Hydro")->Param<int>("nscalars");
   const auto ncomp = pmb->packages.Get("Hydro")->Param<int>("ncomp");
+  const auto comp_abar = pmb->packages.Get("Hydro")->Param<std::vector<Real>>(
+      "comp_abar");
 
   // Temperature limits for root finding & initial guess
   static constexpr int ilTMin_ = 3;
@@ -499,11 +501,13 @@ template <class T> void ConsToPrim(MeshData<Real> *md) {
           lT = 7.0;
         }
         if (update_lambda) {
-
-          // We don't need the actual abar and zbar, they just need to yield
-          // the correct ye value
           Real &u_ye = cons(NHYDRO + ncomp, k, j, i);
-          abar = 16.0;
+          Real abar_tmp = 0.0;
+          for (int n = NHYDRO; n < NHYDRO + ncomp; ++n) {
+            abar_tmp += cons(n, k, j, i) * di / comp_abar[n - NHYDRO];
+          }
+          abar = 1.0 / abar_tmp;
+
           zbar = abar * u_ye * di;
 
           Real lambda_tmp[3] = {abar, zbar, lT};
