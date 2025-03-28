@@ -522,9 +522,9 @@ template <class T> void ConsToPrim(MeshData<Real> *md) {
         }
 
         Real lambda[3] = {abar, zbar, lT};
-        Real gm1 = eos.GruneisenParamFromDensityInternalEnergy(
-            u_d, (u_e - e_k) / u_d, lambda);
-        w_p = gm1 * (u_e - e_k);
+        w_p = eos.PressureFromDensityInternalEnergy(u_d, (u_e - e_k) / u_d,
+                                                    lambda);
+        Real gm1 = w_p / (u_d * e_k);
 
         // apply pressure floor, correct total energy
         u_e = (w_p > pressure_floor_) ? u_e : ((pressure_floor_ / gm1) + e_k);
@@ -533,9 +533,7 @@ template <class T> void ConsToPrim(MeshData<Real> *md) {
         gamma_c = eos.BulkModulusFromDensityInternalEnergy(
                       u_d, (u_e - e_k) / u_d, lambda) /
                   w_p;
-        gamma_e = eos.GruneisenParamFromDensityInternalEnergy(
-                      u_d, (u_e - e_k) / u_d, lambda) +
-                  1.0;
+        gamma_e = w_p / (u_e - e_k) + 1;
 
         // Convert passive scalars
         for (int n = NHYDRO; n < NHYDRO + nscalars; ++n) {
