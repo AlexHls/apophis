@@ -14,7 +14,7 @@ make
 To build with CUDA support, use the following command:
 
 ```bash
-cmake -DApohis_ENABLE_CUDA=ON -DCMAKE_CXX_COMPILER=${PWD}/../submodules/singularity-eos/utils/kokkos/bin/nvcc_wrapper ..
+cmake -DApophis_ENABLE_CUDA=ON -DCMAKE_CXX_COMPILER=${PWD}/../submodules/singularity-eos/utils/kokkos/bin/nvcc_wrapper ..
 ```
 
 You **must** set the `CMAKE_CXX_COMPILER` variable to the path of the `nvcc_wrapper` script. The `singularity-eos` repository contains one such script, but you can point to any other script that sets the necessary environment variables for the CUDA compiler.
@@ -23,7 +23,7 @@ You **must** set the `CMAKE_CXX_COMPILER` variable to the path of the `nvcc_wrap
 If you are using Arch Linux, you can use the following command to build with CUDA support:
 
 ```bash
-cmake -DApohis_ENABLE_CUDA=ON -DCMAKE_CXX_COMPILER=${PWD}/../bin/nvcc_wrapper_archlinux ..
+cmake -DApophis_ENABLE_CUDA=ON -DCMAKE_CXX_COMPILER=${PWD}/../bin/nvcc_wrapper_archlinux ..
 ```
 
 This command sets the `c++` compiler version to `g++-13` since the latest version (version) does not work properly with the CUDA compiler.
