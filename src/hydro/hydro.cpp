@@ -12,7 +12,6 @@
 #include "interface/state_descriptor.hpp"
 #include "kokkos_abstraction.hpp"
 #include "parthenon/parthenon.hpp"
-#include "singularity-eos/eos/eos.hpp"
 #include <parthenon/package.hpp>
 
 using parthenon::DevExecSpace;
@@ -71,23 +70,6 @@ InitializeHydro(ParameterInput *pin) {
   }
 
   pkg->AddParam<>("reconstruction", recon);
-
-  // Equation of state
-  const auto eos_str = pin->GetOrAddString("eos", "type", "ideal");
-  if (eos_str == "ideal") {
-    const Real gm1_in = pin->GetOrAddReal("eos", "gm1", 0.6666667);
-    const Real cv_in = pin->GetOrAddReal("eos", "cv", 1.5);
-    singularity::EOS eos = singularity::IdealGas(gm1_in, cv_in);
-    singularity::EOS eos_device = eos.GetOnDevice();
-    pkg->AddParam<>("eos", eos_device);
-    pkg->AddParam<>("eos_host", eos);
-    pkg->AddParam<>("update_lambda", false);
-  } else {
-    PARTHENON_FAIL("[Apophis]: EOS not recognized. Exiting.");
-  }
-
-  pkg->FillDerivedMesh = ConsToPrim<singularity::EOS>;
-  pkg->EstimateTimestepMesh = EstimateTimestep<Fluid::euler>;
 
   // Riemann solver
   const auto riemann_str = pin->GetString("hydro", "riemann");
@@ -166,18 +148,32 @@ InitializeHydro(ParameterInput *pin) {
   std::vector<std::string> comp_labels;
   std::vector<Real> comp_abar;
   std::vector<Real> comp_zbar;
+  std::vector<Real> comp_ebind;
   if (comp_str == "ONe") {
     nscalars += 7; // 6 for species + 1 for electron fraction
     ncomp = 6;
     comp_labels = {"alpha", "C12", "O16", "Ne20", "IME", "IGE"};
     comp_abar = {4.0, 12.0, 16.0, 20.0, 30.0, 56.0};
     comp_zbar = {2.0, 6.0, 8.0, 10.0, 15.0, 28.0};
+    comp_ebind = {6.8266e+18,  7.41121e+18, 7.69691e+18,
+                  7.74994e+18, 8.17906e+18, 8.34e+18};
   }
-  pkg->AddParam<int>("nscalars", nscalars);
   pkg->AddParam<int>("ncomp", ncomp);
   pkg->AddParam<std::vector<std::string>>("comp_labels", comp_labels);
   pkg->AddParam<std::vector<Real>>("comp_abar", comp_abar);
   pkg->AddParam<std::vector<Real>>("comp_zbar", comp_zbar);
+  pkg->AddParam<std::vector<Real>>("comp_ebind", comp_ebind);
+
+  // Levelset
+  auto nlset = pin->GetOrAddInteger("hydro", "nlset", 0);
+  if (nlset > 0 && ncomp < 1) {
+    PARTHENON_FAIL(
+        "[Apophis]: Levelset is enabled but no composition is set. Exiting.");
+  }
+  nscalars += nlset * 2;
+  pkg->AddParam<int>("nlset", nlset);
+
+  pkg->AddParam<int>("nscalars", nscalars);
 
   // Add fields
   std::string field_name = "cons";
@@ -192,6 +188,12 @@ InitializeHydro(ParameterInput *pin) {
   }
   if (ncomp > 0) {
     cons_labels.push_back("scalar_density_ye");
+  }
+  if (nlset > 0) {
+    for (int i = 0; i < nlset; i++) {
+      cons_labels.push_back("scalar_density_lset" + std::to_string(i));
+      cons_labels.push_back("scalar_density_xfuel" + std::to_string(i));
+    }
   }
   parthenon::Metadata m(
       {parthenon::Metadata::Cell, parthenon::Metadata::Independent,
@@ -212,10 +214,30 @@ InitializeHydro(ParameterInput *pin) {
   if (ncomp > 0) {
     prim_labels.push_back("scalar_ye");
   }
+  if (nlset > 0) {
+    for (int i = 0; i < nlset; i++) {
+      prim_labels.push_back("scalar_lset" + std::to_string(i));
+      prim_labels.push_back("scalar_xfuel" + std::to_string(i));
+    }
+  }
   m = parthenon::Metadata(
       {parthenon::Metadata::Cell, parthenon::Metadata::Derived},
       std::vector<int>({NHYDRO + nscalars}), prim_labels);
   pkg->AddField(field_name, m);
+
+  if (nlset > 0) {
+    for (int i = 0; i < nlset; i++) {
+      field_name = "lset" + std::to_string(i);
+      std::vector<std::string> lset_labels(2);
+      lset_labels[LIFL] = "fuel";
+      lset_labels[LIDST] = "dist";
+      m = parthenon::Metadata(
+          {parthenon::Metadata::Cell, parthenon::Metadata::Derived,
+           parthenon::Metadata::Intensive, parthenon::Metadata::FillGhost},
+          std::vector<int>({2}), lset_labels);
+      pkg->AddField(field_name, m);
+    }
+  }
 
   field_name = "eos_lambda";
   std::vector<std::string> eos_lambda_labels(3);
@@ -236,6 +258,43 @@ InitializeHydro(ParameterInput *pin) {
       {parthenon::Metadata::Cell, parthenon::Metadata::Derived},
       std::vector<int>({2}), gamma_labels);
   pkg->AddField(field_name, m);
+
+  // Equation of state
+  const auto eos_str = pin->GetOrAddString("eos", "type", "ideal");
+  if (eos_str == "ideal") {
+    const Real gm1_in = pin->GetOrAddReal("eos", "gm1", 0.6666667);
+    const Real cv_in = pin->GetOrAddReal("eos", "cv", 1.5);
+    EOS_t eos = singularity::IdealGas(gm1_in, cv_in);
+    EOS_t eos_device = eos.GetOnDevice();
+    pkg->AddParam<>("eos", eos_device);
+    pkg->AddParam<>("eos_host", eos);
+    pkg->AddParam<>("update_lambda", false);
+  } else if (eos_str == "helm") {
+    if (ncomp < 1) {
+      PARTHENON_FAIL(
+          "[Apophis]: Helmholtz EOS is enabled but no composition is set. "
+          "Exiting.");
+    }
+    const bool eos_rad = pin->GetOrAddReal("eos", "radiation", 1);
+    const bool eos_gas = pin->GetOrAddReal("eos", "gas", 1);
+    const bool eos_coulomb = pin->GetOrAddReal("eos", "coulomb", 1);
+    const bool eos_ionized = pin->GetOrAddReal("eos", "ionized", 1);
+    const bool eos_degenerate = pin->GetOrAddReal("eos", "degenerate", 1);
+    std::string helm_table_file =
+        pin->GetOrAddString("eos", "helm_table", "helm_table.dat");
+    EOS_t eos =
+        singularity::Helmholtz(helm_table_file, eos_rad, eos_gas, eos_coulomb,
+                               eos_ionized, eos_degenerate);
+    EOS_t eos_device = eos.GetOnDevice();
+    pkg->AddParam<>("eos", eos_device);
+    pkg->AddParam<>("eos_host", eos);
+    pkg->AddParam<>("update_lambda", true);
+  } else {
+    PARTHENON_FAIL("[Apophis]: EOS not recognized. Exiting.");
+  }
+
+  pkg->FillDerivedMesh = ConsToPrim<EOS_t>;
+  pkg->EstimateTimestepMesh = EstimateTimestep<Fluid::euler>;
 
   // Misc
   Real dfloor =
@@ -298,7 +357,7 @@ template <Fluid fluid> Real EstimateTimestep(MeshData<Real> *md) {
   const auto &cons_pack = md->PackVariables(std::vector<std::string>{"cons"});
   const auto &eos_lambda_pack =
       md->PackVariables(std::vector<std::string>{"eos_lambda"});
-  const auto &eos_ = hydro_pkg->Param<singularity::EOS>("eos");
+  const auto &eos_ = hydro_pkg->Param<EOS_t>("eos");
 
   IndexRange ib = md->GetBlockData(0)->GetBoundsI(IndexDomain::interior);
   IndexRange jb = md->GetBlockData(0)->GetBoundsJ(IndexDomain::interior);
@@ -386,6 +445,9 @@ template <class T> void ConsToPrim(MeshData<Real> *md) {
   bool update_lambda = pmb->packages.Get("Hydro")->Param<bool>("update_lambda");
 
   const auto nscalars = pmb->packages.Get("Hydro")->Param<int>("nscalars");
+  const auto ncomp = pmb->packages.Get("Hydro")->Param<int>("ncomp");
+  const auto comp_abar = pmb->packages.Get("Hydro")->Param<std::vector<Real>>(
+      "comp_abar");
 
   // Temperature limits for root finding & initial guess
   static constexpr int ilTMin_ = 3;
@@ -439,9 +501,14 @@ template <class T> void ConsToPrim(MeshData<Real> *md) {
           lT = 7.0;
         }
         if (update_lambda) {
+          Real &u_ye = cons(NHYDRO + ncomp, k, j, i);
+          Real abar_tmp = 0.0;
+          for (int n = NHYDRO; n < NHYDRO + ncomp; ++n) {
+            abar_tmp += cons(n, k, j, i) * di / comp_abar[n - NHYDRO];
+          }
+          abar = 1.0 / abar_tmp;
 
-          Real ab = 0.0;
-          Real zb = 0.0;
+          zbar = abar * u_ye * di;
 
           Real lambda_tmp[3] = {abar, zbar, lT};
 
@@ -455,9 +522,9 @@ template <class T> void ConsToPrim(MeshData<Real> *md) {
         }
 
         Real lambda[3] = {abar, zbar, lT};
-        Real gm1 = eos.GruneisenParamFromDensityInternalEnergy(
-            u_d, (u_e - e_k) / u_d, lambda);
-        w_p = gm1 * (u_e - e_k);
+        w_p = eos.PressureFromDensityInternalEnergy(u_d, (u_e - e_k) / u_d,
+                                                    lambda);
+        Real gm1 = w_p / (u_d * e_k);
 
         // apply pressure floor, correct total energy
         u_e = (w_p > pressure_floor_) ? u_e : ((pressure_floor_ / gm1) + e_k);
@@ -466,9 +533,7 @@ template <class T> void ConsToPrim(MeshData<Real> *md) {
         gamma_c = eos.BulkModulusFromDensityInternalEnergy(
                       u_d, (u_e - e_k) / u_d, lambda) /
                   w_p;
-        gamma_e = eos.GruneisenParamFromDensityInternalEnergy(
-                      u_d, (u_e - e_k) / u_d, lambda) +
-                  1.0;
+        gamma_e = w_p / (u_e - e_k) + 1;
 
         // Convert passive scalars
         for (int n = NHYDRO; n < NHYDRO + nscalars; ++n) {
@@ -500,7 +565,7 @@ TaskStatus CalculateFluxes(std::shared_ptr<MeshData<Real>> &md) {
   const int nhydro = pkg->Param<int>("nhydro");
   const int nscalars = pkg->Param<int>("nscalars");
 
-  const auto &eos = pkg->Param<singularity::EOS>("eos");
+  const auto &eos = pkg->Param<EOS_t>("eos");
 
   auto num_scratch_vars = nhydro + nscalars;
   auto prim_list = std::vector<std::string>({"prim"});

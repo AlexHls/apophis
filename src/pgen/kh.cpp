@@ -247,8 +247,6 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
       }
     }
   }
-  // copy initialized vars to device
-  u_dev.DeepCopy(u);
 
   //--- iprob=6.  Uniform stream with density ratio "drat" located in region
   //-1/4<y<1/4
@@ -262,6 +260,7 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
     Real amp = pin->GetReal("problem/kh", "amp");
     Real ofrac = pin->GetReal("problem/kh", "ofrac");
     Real ye = pin->GetReal("problem/kh", "ye");
+    Real pamp = pin->GetReal("problem/kh", "pamp");
     Real rho = 1.0;
     for (int k = kb.s; k <= kb.e; k++) {
       for (int j = jb.s; j <= jb.e; j++) {
@@ -285,14 +284,19 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
             u(NHYDRO + 3, k, j, i) = 0.0 * drat * rho; // Ne20
             u(NHYDRO + 6, k, j, i) = 0.5 * drat * rho; // Ye
           }
+          u(NHYDRO + 7, k, j, i) =
+              (0.25 - std::abs(coords.Xc<2>(j))) * u(IDN, k, j, i); // lset1
           // Pressure scaled to give a sound speed of 1 with gamma=1.4
           u(IEN, k, j, i) =
-              2.5 / gm1 + 0.5 * (SQR(u(IM1, k, j, i)) + SQR(u(IM2, k, j, i))) /
-                              u(IDN, k, j, i);
+              pamp / gm1 + 0.5 * (SQR(u(IM1, k, j, i)) + SQR(u(IM2, k, j, i))) /
+                               u(IDN, k, j, i);
         }
       }
     }
   }
+
+  // copy initialized vars to device
+  u_dev.DeepCopy(u);
 }
 
 } // namespace kh

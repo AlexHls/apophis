@@ -1,0 +1,79 @@
+<comment>
+problem = spherical blast wave
+
+<job>
+problem_id = burn_tube
+
+<parthenon/mesh>
+refinement = none
+numlevel = 3
+nghost = 2
+
+nx1 = 128
+x1min = 0.0
+x1max = 6e7
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2 = 128
+x2min = 0.0
+x2max = 6e7
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3 = 1
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<parthenon/meshblock>
+nx1=16
+nx2=16
+nx3=1
+
+<parthenon/time>
+integrator = rk2
+cfl = 0.4
+dt_init = 1.0e-5
+tlim = 0.5
+nlim = 100000
+perf_cycle_offset = 2 # number of inital cycles not to be included in perf calc
+ncycle_out_mesh = -100
+
+<hydro>
+fluid = euler
+eos = adiabatic
+riemann = hllc
+reconstruction = plm
+nlset = 1
+composition = ONe
+gamma = 1.666666666666667 # gamma = C_p/C_v
+scratch_level = 0 # 0 is actual scratch (tiny); 1 is HBM
+
+<eos>
+eos_type = helm
+radiation = 1
+gas = 1
+coulomb = 1
+ionized = 1
+degenerate = 1
+helm_table = ../data/helm_table.dat
+
+<refinement>
+type                         = pressure_gradient
+threshold_pressure_gradient  = 1e2
+
+<problem>
+rho_u = 5.0e8
+temp_u = 0.1e9
+temp_b = 9.0e9
+x1 = 2.0e7
+x2 = 4.0e7
+y1 = 2.0e7
+y2 = 4.0e7
+
+<parthenon/output0>
+file_type = hdf5
+dt = 0.005
+variables = cons,prim,lset

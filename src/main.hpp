@@ -19,6 +19,11 @@ enum {
   IPR = 4,
 };
 
+enum {
+  LIFL = 0, // fuel
+  LIDST = 1, // dist
+};
+
 enum class Fluid {
   undefined,
   euler,

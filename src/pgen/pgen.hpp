@@ -30,4 +30,10 @@ using namespace parthenon::driver::prelude;
 void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin);
 } // namespace kh
 
+namespace burn_tube {
+using namespace parthenon::driver::prelude;
+
+void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin);
+} // namespace burn_tube
+
 #endif // PGEN_PGEN_HPP_

@@ -5,7 +5,6 @@
 #include "rsolvers.hpp"
 
 #include "parthenon/parthenon.hpp"
-#include "singularity-eos/eos/eos.hpp"
 
 using parthenon::Real;
 using parthenon::ScratchPad2D;
@@ -17,7 +16,7 @@ struct Riemann<Fluid::euler, RiemannSolver::hllc> {
         const int iu, const int ivx, const ScratchPad2D<Real> &wl,
         const ScratchPad2D<Real> &wr, parthenon::VariableFluxPack<Real> &cons,
         const ScratchPad2D<Real> &ifl, const ScratchPad2D<Real> &ifr,
-        const singularity::EOS &eos, parthenon::VariablePack<Real> &eos_lambda) {
+        const EOS_t &eos, parthenon::VariablePack<Real> &eos_lambda) {
     int ivy = IV1 + ((ivx - IV1) + 1) % 3;
     int ivz = IV1 + ((ivx - IV1) + 2) % 3;
     static constexpr Real C_LIGHT = 2.99792458e10;

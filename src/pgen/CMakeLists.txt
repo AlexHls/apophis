@@ -3,4 +3,5 @@ target_sources(apophis PRIVATE
     linear_wave.cpp
     blast.cpp
     kh.cpp
+    burn_tube.cpp
 )

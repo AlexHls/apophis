@@ -1,5 +1,7 @@
 #include "apophis_driver.hpp"
+#include "burner/burner.hpp"
 #include "hydro/hydro.hpp"
+#include "levelset/lset.hpp"
 
 #include <amr_criteria/refinement_package.hpp>
 #include <parthenon/parthenon.hpp>
@@ -78,6 +80,13 @@ TaskCollection ApophisDriver::MakeTaskCollection(BlockList_t &blocks,
         mu0.get(), mu1.get(), integrator->gam0[stage - 1],
         integrator->gam1[stage - 1],
         integrator->beta[stage - 1] * integrator->dt);
+
+    const auto nlset = hydro_pkg->Param<int>("nlset");
+    for (int lset_id = 0; lset_id < nlset; lset_id++) {
+      auto reinit = tl.AddTask(update, ReinitializeLset, mu0, lset_id);
+      auto burn = tl.AddTask(reinit, Burn, mu0, lset_id,
+                             integrator->beta[stage - 1] * integrator->dt);
+    }
 
     parthenon::AddBoundaryExchangeTasks(update, tl, mu0, pmesh->multilevel);
   }

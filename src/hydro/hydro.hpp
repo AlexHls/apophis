@@ -4,6 +4,9 @@
 #include "../main.hpp"
 
 #include "parthenon/parthenon.hpp"
+#include <singularity-eos/eos/eos_ideal.hpp>
+#include <singularity-eos/eos/eos_helmholtz.hpp>
+#include <singularity-eos/eos/eos_variant.hpp>
 
 using namespace parthenon::driver::prelude;
 
@@ -40,6 +43,8 @@ template <>
   constexpr size_t GetNVars<Fluid::euler>() {
     return 5;
   }
+
+using EOS_t = singularity::Variant<singularity::IdealGas, singularity::Helmholtz>;
 
 } // namespace Apophis
 
