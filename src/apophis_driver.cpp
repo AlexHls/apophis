@@ -1,5 +1,6 @@
 #include "apophis_driver.hpp"
 #include "burner/burner.hpp"
+#include "gravity/gravity.hpp"
 #include "hydro/hydro.hpp"
 #include "levelset/lset.hpp"
 
@@ -15,6 +16,7 @@ parthenon::Packages_t
 ProcessPackages(std::unique_ptr<parthenon::ParameterInput> &pin) {
   parthenon::Packages_t packages;
   packages.Add(Apophis::InitializeHydro(pin.get()));
+  packages.Add(Apophis::InitializeGravity(pin.get()));
   return packages;
 }
 
