@@ -4,6 +4,7 @@
 
 // Apophis headers
 #include "apophis_driver.hpp"
+#include "boundaries/apophis_boundaries.hpp"
 #include "pgen/pgen.hpp"
 
 int main(int argc, char *argv[]) {
@@ -45,6 +46,7 @@ int main(int argc, char *argv[]) {
   if (parthenon::Globals::my_rank == 0) {
     std::cout << "[Apophis]: Initializing..." << std::endl;
   }
+  Boundaries::ProcessBoundaryConditions(pman);
   pman.ParthenonInitPackagesAndMesh();
 
   Apophis::ApophisDriver driver(pman.pinput.get(), pman.app_input.get(),
