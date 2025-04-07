@@ -8,7 +8,6 @@ problem_id = rt
 iprob  = 1
 rho_lower = 2.0
 rho_upper = 1.0
-en_ini = 2.5
 perturb_strength = 0.01
 
 <refinement>
@@ -48,7 +47,7 @@ nx3=1
 integrator = rk2
 cfl = 0.4
 tlim = 12.75
-nlim = 10000
+nlim = 100000
 perf_cycle_offset = 2 # number of inital cycles not to be included in perf calc
 ncycle_out_mesh = -1000
 
@@ -63,7 +62,13 @@ eos_type = ideal
 gm1 = 0.4
 Cv = 1.5
 
+<gravity>
+type = constant
+grav_x_ini = 0.0
+grav_y_ini = -0.1
+grav_z_ini = 0.0
+
 <parthenon/output0>
 file_type = hdf5
-dt = 1.0
-variables = prim
+dt = 0.5
+variables = prim,cons

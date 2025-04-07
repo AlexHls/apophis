@@ -32,26 +32,38 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
     // Read problem parameters
     Real rho_lower = pin->GetReal("problem/rt", "rho_lower");
     Real rho_upper = pin->GetReal("problem/rt", "rho_upper");
-    Real en_ini = pin->GetReal("problem/rt", "en_ini");
     Real perturb_strength = pin->GetReal("problem/rt", "perturb_strength");
+    Real grav_x_ini = pin->GetReal("gravity", "grav_x_ini");
+    Real grav_y_ini = pin->GetReal("gravity", "grav_y_ini");
+
+    Real x1min = pin->GetReal("parthenon/mesh", "x1min");
+    Real x1max = pin->GetReal("parthenon/mesh", "x1max");
+    Real x2min = pin->GetReal("parthenon/mesh", "x2min");
+    Real x2max = pin->GetReal("parthenon/mesh", "x2max");
+
+    Real kx = 2.0 * (M_PI) / (x1max - x1min);
+    Real ky = 2.0 * (M_PI) / (x2max - x2min);
+
     pmb->par_for(
         "ProblemGenerator", kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
         KOKKOS_LAMBDA(const int k, const int j, const int i) {
           u(IM1, k, j, i) = perturb_strength *
-                            (1.0 + std::cos(4.0 * M_PI * coords.Xc<1>(i))) *
-                            (1.0 + std::cos(3.0 * M_PI * coords.Xc<2>(j))) /
-                            4.0;
+                            (1.0 + std::cos(kx * M_PI * coords.Xc<1>(i))) *
+                            (1.0 + std::cos(ky * M_PI * coords.Xc<2>(j))) / 4.0;
           if (coords.Xc<2>(j) < 0.0) {
             u(IDN, k, j, i) = rho_lower;
-            u(IM1, k, j, i) = rho_lower * u(IM1, k, j, i);
-            u(IEN, k, j, i) = en_ini * rho_lower;
           } else {
             u(IDN, k, j, i) = rho_upper;
-            u(IM1, k, j, i) = rho_upper * u(IM1, k, j, i);
-            u(IEN, k, j, i) = en_ini * rho_upper;
           }
+          u(IM1, k, j, i) *= u(IDN, k, j, i);
           u(IM2, k, j, i) = 0.0;
           u(IM3, k, j, i) = 0.0;
+          // Careful, this does not allow for gravity in any direction
+          // except the x2 direction
+          u(IEN, k, j, i) =
+              (1.0 / gam + grav_y_ini * u(IDN, k, j, i) * coords.Xc<2>(j)) /
+              gm1;
+          u(IEN, k, j, i) += 0.5 * SQR(u(IM1, k, j, i)) / u(IDN, k, j, i);
         });
   }
 
