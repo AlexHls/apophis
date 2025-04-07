@@ -12,6 +12,8 @@ namespace Apophis {
 std::shared_ptr<parthenon::StateDescriptor>
 InitializeGravity(ParameterInput *pin);
 
+TaskStatus UpdateGravity(std::shared_ptr<MeshData<Real>> &md, const Real dt);
+
 } // namespace Apophis
 
 #endif // GRAVITY_GRAVITY_HPP_

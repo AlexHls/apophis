@@ -47,7 +47,7 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
     pmb->par_for(
         "ProblemGenerator", kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
         KOKKOS_LAMBDA(const int k, const int j, const int i) {
-          u(IM1, k, j, i) = perturb_strength *
+          u(IM2, k, j, i) = perturb_strength *
                             (1.0 + std::cos(kx * M_PI * coords.Xc<1>(i))) *
                             (1.0 + std::cos(ky * M_PI * coords.Xc<2>(j))) / 4.0;
           if (coords.Xc<2>(j) < 0.0) {
@@ -55,15 +55,15 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
           } else {
             u(IDN, k, j, i) = rho_upper;
           }
-          u(IM1, k, j, i) *= u(IDN, k, j, i);
-          u(IM2, k, j, i) = 0.0;
+          u(IM1, k, j, i) = 0.0;
+          u(IM2, k, j, i) *= u(IDN, k, j, i);
           u(IM3, k, j, i) = 0.0;
           // Careful, this does not allow for gravity in any direction
           // except the x2 direction
           u(IEN, k, j, i) =
               (1.0 / gam + grav_y_ini * u(IDN, k, j, i) * coords.Xc<2>(j)) /
               gm1;
-          u(IEN, k, j, i) += 0.5 * SQR(u(IM1, k, j, i)) / u(IDN, k, j, i);
+          u(IEN, k, j, i) += 0.5 * SQR(u(IM2, k, j, i)) / u(IDN, k, j, i);
         });
   }
 

@@ -83,6 +83,9 @@ TaskCollection ApophisDriver::MakeTaskCollection(BlockList_t &blocks,
         integrator->gam1[stage - 1],
         integrator->beta[stage - 1] * integrator->dt);
 
+    auto gravity = tl.AddTask(update, UpdateGravity, mu0,
+                              integrator->beta[stage - 1] * integrator->dt);
+
     const auto nlset = hydro_pkg->Param<int>("nlset");
     for (int lset_id = 0; lset_id < nlset; lset_id++) {
       auto reinit = tl.AddTask(update, ReinitializeLset, mu0, lset_id);

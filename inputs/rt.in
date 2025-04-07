@@ -6,8 +6,8 @@ problem_id = rt
 
 <problem/rt>
 iprob  = 1
-rho_lower = 2.0
-rho_upper = 1.0
+rho_lower = 1.0
+rho_upper = 2.0
 perturb_strength = 0.01
 
 <refinement>
@@ -65,7 +65,7 @@ Cv = 1.5
 <gravity>
 type = constant
 grav_x_ini = 0.0
-grav_y_ini = -0.1
+grav_y_ini = 0.1
 grav_z_ini = 0.0
 
 <parthenon/output0>
