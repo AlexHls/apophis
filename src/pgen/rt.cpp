@@ -61,7 +61,7 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
           // Careful, this does not allow for gravity in any direction
           // except the x2 direction
           u(IEN, k, j, i) =
-              (1.0 / gam + grav_y_ini * u(IDN, k, j, i) * coords.Xc<2>(j)) /
+              (1.0 / gam - grav_y_ini * u(IDN, k, j, i) * coords.Xc<2>(j)) /
               gm1;
           u(IEN, k, j, i) += 0.5 * SQR(u(IM2, k, j, i)) / u(IDN, k, j, i);
         });
