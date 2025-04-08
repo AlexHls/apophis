@@ -57,7 +57,7 @@ InitializeHydro(ParameterInput *pin) {
     recon = Reconstruction::plm;
     recon_need_ghost = 2;
   } else if (recon_str == "ppm") {
-    recon = Reconstruction::plm;
+    recon = Reconstruction::ppm;
     recon_need_ghost = 3;
   } else {
     PARTHENON_FAIL("[Apophis]: Reconstruction not recognized. Exiting.");
