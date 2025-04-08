@@ -9,6 +9,7 @@ iprob  = 1
 rho_lower = 1.0
 rho_upper = 2.0
 perturb_strength = 0.01
+n_modes = 1.0
 
 <refinement>
 type                     = unset

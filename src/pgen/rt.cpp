@@ -33,6 +33,7 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
     Real rho_lower = pin->GetReal("problem/rt", "rho_lower");
     Real rho_upper = pin->GetReal("problem/rt", "rho_upper");
     Real perturb_strength = pin->GetReal("problem/rt", "perturb_strength");
+    Real n_modes = pin->GetOrAddReal("problem/rt", "n_modes", 1.0);
     Real grav_x_ini = pin->GetReal("gravity", "grav_x_ini");
     Real grav_y_ini = pin->GetReal("gravity", "grav_y_ini");
 
@@ -48,8 +49,9 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
         "ProblemGenerator", kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
         KOKKOS_LAMBDA(const int k, const int j, const int i) {
           u(IM2, k, j, i) = perturb_strength *
-                            (1.0 + std::cos(kx * M_PI * coords.Xc<1>(i))) *
-                            (1.0 + std::cos(ky * M_PI * coords.Xc<2>(j))) / 4.0;
+                            (1.0 + std::cos(kx * n_modes * coords.Xc<1>(i))) *
+                            (1.0 + std::cos(ky * n_modes * coords.Xc<2>(j))) /
+                            4.0;
           if (coords.Xc<2>(j) < 0.0) {
             u(IDN, k, j, i) = rho_lower;
           } else {
