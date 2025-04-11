@@ -25,13 +25,51 @@ InitializeGravity(ParameterInput *pin) {
   }
 
   pkg->AddParam<>("gravity", gravity);
+
+  // Add the gravity field
+  std::string field_name = "gravity";
+  std::vector<std::string> labels(3);
+  labels[0] = "gx";
+  labels[1] = "gy";
+  labels[2] = "gz";
+  auto m = parthenon::Metadata(
+      {parthenon::Metadata::Cell, parthenon::Metadata::Derived,
+       parthenon::Metadata::Intensive, parthenon::Metadata::FillGhost},
+      std::vector<int>({3}), labels);
+
+  pkg->AddField(field_name, m);
+
+  // Add gravity functions
+  std::map<std::tuple<Fluid, Gravity>, GravityFun_t *> gravity_functions{};
+  add_gravity_fun<Fluid::euler, Gravity::none>(gravity_functions);
+  add_gravity_fun<Fluid::euler, Gravity::constant>(gravity_functions);
+
+  GravityFun_t *gravity_fun = nullptr;
+  gravity_fun = gravity_functions.at(std::make_tuple(Fluid::euler, gravity));
+
+  pkg->AddParam<GravityFun_t *>("gravity_fun", gravity_fun);
+
   return pkg;
 }
 
-TaskStatus UpdateGravity(std::shared_ptr<MeshData<Real>> &md, const Real dt) {
+template <>
+TaskStatus CalculateGravity<Fluid::euler, Gravity::none>(
+    std::shared_ptr<MeshData<Real>> &md) {
+  return TaskStatus::complete;
+}
+
+template <>
+TaskStatus CalculateGravity<Fluid::euler, Gravity::constant>(
+    std::shared_ptr<MeshData<Real>> &md) {
+  // For constant gravity, also no update is needed
+  return TaskStatus::complete;
+}
+
+TaskStatus ApplyGravity(std::shared_ptr<MeshData<Real>> &md, const Real dt) {
   auto pmb = md->GetBlockData(0)->GetBlockPointer();
   auto cons_pack = md->PackVariables(std::vector<std::string>{"cons"});
   const auto prim_pack = md->PackVariables(std::vector<std::string>{"prim"});
+  const auto grav_pack = md->PackVariables(std::vector<std::string>{"gravity"});
   const auto &cellbounds = pmb->cellbounds;
   auto ib = cellbounds.GetBoundsI(IndexDomain::interior);
   auto jb = cellbounds.GetBoundsJ(IndexDomain::interior);
@@ -42,8 +80,15 @@ TaskStatus UpdateGravity(std::shared_ptr<MeshData<Real>> &md, const Real dt) {
       ib.e, KOKKOS_LAMBDA(const int b, const int k, const int j, const int i) {
         auto &cons = cons_pack(b);
         const auto w = prim_pack(b);
-        cons(IM2, k, j, i) -= 0.1 * w(IDN, k, j, i) * dt;
-        cons(IEN, k, j, i) -= 0.1 * w(IDN, k, j, i) * w(IV2, k, j, i) * dt;
+        const auto &grav = grav_pack(b);
+
+        cons(IM1, k, j, i) += grav(0, k, j, i) * w(IDN, k, j, i) * dt;
+        cons(IM2, k, j, i) += grav(1, k, j, i) * w(IDN, k, j, i) * dt;
+        cons(IM3, k, j, i) += grav(2, k, j, i) * w(IDN, k, j, i) * dt;
+        cons(IEN, k, j, i) += (grav(0, k, j, i) * w(IV1, k, j, i) +
+                               grav(1, k, j, i) * w(IV2, k, j, i) +
+                               grav(2, k, j, i) * w(IV3, k, j, i)) *
+                              w(IDN, k, j, i) * dt;
       });
 
   return TaskStatus::complete;

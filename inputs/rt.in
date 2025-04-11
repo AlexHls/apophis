@@ -66,7 +66,7 @@ Cv = 1.5
 <gravity>
 type = constant
 grav_x_ini = 0.0
-grav_y_ini = 0.1
+grav_y_ini = -0.1
 grav_z_ini = 0.0
 
 <parthenon/output0>
