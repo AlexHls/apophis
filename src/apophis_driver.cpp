@@ -1,5 +1,6 @@
 #include "apophis_driver.hpp"
 #include "burner/burner.hpp"
+#include "gravity/gravity.hpp"
 #include "hydro/hydro.hpp"
 #include "levelset/lset.hpp"
 
@@ -15,6 +16,7 @@ parthenon::Packages_t
 ProcessPackages(std::unique_ptr<parthenon::ParameterInput> &pin) {
   parthenon::Packages_t packages;
   packages.Add(Apophis::InitializeHydro(pin.get()));
+  packages.Add(Apophis::InitializeGravity(pin.get()));
   return packages;
 }
 
@@ -29,6 +31,7 @@ TaskCollection ApophisDriver::MakeTaskCollection(BlockList_t &blocks,
   TaskCollection tc;
   const auto &stage_name = integrator->stage_name;
   auto hydro_pkg = blocks[0]->packages.Get("Hydro");
+  auto grav_pkg = blocks[0]->packages.Get("Gravity");
 
   TaskID none(0);
 
@@ -81,6 +84,11 @@ TaskCollection ApophisDriver::MakeTaskCollection(BlockList_t &blocks,
         integrator->gam1[stage - 1],
         integrator->beta[stage - 1] * integrator->dt);
 
+    GravityFun_t *gravity_fun = grav_pkg->Param<GravityFun_t *>("gravity_fun");
+    auto calc_gravity = tl.AddTask(update, gravity_fun, mu0);
+    auto gravity = tl.AddTask(calc_gravity, ApplyGravity, mu0,
+                              integrator->beta[stage - 1] * integrator->dt);
+
     const auto nlset = hydro_pkg->Param<int>("nlset");
     for (int lset_id = 0; lset_id < nlset; lset_id++) {
       auto reinit = tl.AddTask(update, ReinitializeLset, mu0, lset_id);
@@ -88,7 +96,7 @@ TaskCollection ApophisDriver::MakeTaskCollection(BlockList_t &blocks,
                              integrator->beta[stage - 1] * integrator->dt);
     }
 
-    parthenon::AddBoundaryExchangeTasks(update, tl, mu0, pmesh->multilevel);
+    parthenon::AddBoundaryExchangeTasks(gravity, tl, mu0, pmesh->multilevel);
   }
 
   TaskRegion &async_region_3 =

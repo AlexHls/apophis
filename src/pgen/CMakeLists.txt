@@ -4,4 +4,5 @@ target_sources(apophis PRIVATE
     blast.cpp
     kh.cpp
     burn_tube.cpp
+    rt.cpp
 )

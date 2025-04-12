@@ -7,6 +7,8 @@ add_executable(
         refinement/other.cpp
         burner/burner.cpp
         levelset/lset.cpp
+        gravity/gravity.cpp
+        boundaries/apophis_boundaries.cpp
 )
 
 add_subdirectory(pgen)

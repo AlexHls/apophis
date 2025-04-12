@@ -1,0 +1,75 @@
+<comment>
+problem =  Rayleigh-Taylor Instability Test
+
+<job>
+problem_id = rt
+
+<problem/rt>
+iprob  = 1
+rho_lower = 1.0
+rho_upper = 2.0
+perturb_strength = 0.01
+n_modes = 1.0
+
+<refinement>
+type                     = unset
+#type                     = xyvelocity_gradient 
+threshold_xyvelocity_gradient  = 0.001
+
+<parthenon/mesh>
+refinement = none
+numlevel = 3
+nghost = 3
+
+nx1 = 128
+x1min = -0.25
+x1max = 0.25
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2 = 384
+x2min = -0.75
+x2max = 0.75
+ix2_bc = reflecting
+ox2_bc = reflecting
+
+nx3 = 1
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<parthenon/meshblock>
+nx1=16
+nx2=48
+nx3=1
+
+<parthenon/time>
+integrator = rk2
+cfl = 0.4
+tlim = 12.75
+nlim = 100000
+perf_cycle_offset = 2 # number of inital cycles not to be included in perf calc
+ncycle_out_mesh = -1000
+
+<hydro>
+riemann = hllc
+reconstruction = ppm
+gamma = 1.4 # gamma = C_p/C_v
+scratch_level = 0 # 0 is actual scratch (tiny); 1 is HBM
+
+<eos>
+eos_type = ideal
+gm1 = 0.4
+Cv = 1.5
+
+<gravity>
+type = constant
+grav_x_ini = 0.0
+grav_y_ini = -0.1
+grav_z_ini = 0.0
+
+<parthenon/output0>
+file_type = hdf5
+dt = 0.5
+variables = prim,cons

@@ -51,6 +51,12 @@ enum class Integrator {
   vl2,
 };
 
+enum class Gravity {
+  undefined,
+  none,
+  constant,
+};
+
 constexpr parthenon::Real float_min{std::numeric_limits<float>::min()};
 
 #endif // MAIN_HPP_
