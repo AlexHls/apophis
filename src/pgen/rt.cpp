@@ -74,8 +74,10 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
         });
   }
 
-  if (iprob == 2) {
+  if (iprob >= 2) {
     // TODO: implement this
+    PARTHENON_FAIL(
+        "ProblemGenerator: iprob >= 2 not implemented yet. Please use iprob=1");
   }
 }
 
