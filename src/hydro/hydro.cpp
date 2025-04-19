@@ -446,8 +446,8 @@ template <class T> void ConsToPrim(MeshData<Real> *md) {
 
   const auto nscalars = pmb->packages.Get("Hydro")->Param<int>("nscalars");
   const auto ncomp = pmb->packages.Get("Hydro")->Param<int>("ncomp");
-  const auto comp_abar = pmb->packages.Get("Hydro")->Param<std::vector<Real>>(
-      "comp_abar");
+  const auto comp_abar =
+      pmb->packages.Get("Hydro")->Param<std::vector<Real>>("comp_abar");
 
   // Temperature limits for root finding & initial guess
   static constexpr int ilTMin_ = 3;

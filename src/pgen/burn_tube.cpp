@@ -7,8 +7,8 @@
 #include <parthenon/driver.hpp>
 #include <parthenon/package.hpp>
 
-#include "../main.hpp"
 #include "../hydro/hydro.hpp"
+#include "../main.hpp"
 
 using namespace parthenon::package::prelude;
 

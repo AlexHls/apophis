@@ -14,7 +14,6 @@
 namespace rt {
 using namespace parthenon::driver::prelude;
 
-
 void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
   auto iprob = pin->GetInteger("problem/rt", "iprob");
   auto ib = pmb->cellbounds.GetBoundsI(IndexDomain::interior);

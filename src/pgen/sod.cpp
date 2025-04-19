@@ -1,8 +1,8 @@
 #include "../main.hpp"
 
 #include "Kokkos_Macros.hpp"
-#include "parthenon/prelude.hpp"
 #include "parthenon/driver.hpp"
+#include "parthenon/prelude.hpp"
 
 using namespace parthenon::driver::prelude;
 

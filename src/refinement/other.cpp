@@ -11,10 +11,10 @@ using parthenon::IndexRange;
 parthenon::AmrTag MaxDensity(MeshBlockData<Real> *rc) {
   auto pmb = rc->GetBlockPointer();
   auto w = rc->Get("prim").data;
-  const auto deref_below =
-      pmb->packages.Get("Hydro")->Param<Real>("refinement/maxdensity_deref_below");
-  const auto refine_above =
-      pmb->packages.Get("Hydro")->Param<Real>("refinement/maxdensity_refine_above");
+  const auto deref_below = pmb->packages.Get("Hydro")->Param<Real>(
+      "refinement/maxdensity_deref_below");
+  const auto refine_above = pmb->packages.Get("Hydro")->Param<Real>(
+      "refinement/maxdensity_refine_above");
 
   IndexRange ib = pmb->cellbounds.GetBoundsI(IndexDomain::interior);
   IndexRange jb = pmb->cellbounds.GetBoundsJ(IndexDomain::interior);
@@ -28,8 +28,10 @@ parthenon::AmrTag MaxDensity(MeshBlockData<Real> *rc) {
       },
       Kokkos::Max<Real>(maxrho));
 
-  if (maxrho > refine_above) return parthenon::AmrTag::refine;
-  if (maxrho < deref_below) return parthenon::AmrTag::derefine;
+  if (maxrho > refine_above)
+    return parthenon::AmrTag::refine;
+  if (maxrho < deref_below)
+    return parthenon::AmrTag::derefine;
   return parthenon::AmrTag::same;
 }
 

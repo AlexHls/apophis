@@ -4,9 +4,9 @@
 #include "parthenon/driver.hpp"
 
 namespace sod {
-  using namespace parthenon::driver::prelude;
+using namespace parthenon::driver::prelude;
 
-  void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin);
+void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin);
 } // namespace sod
 
 namespace linear_wave {

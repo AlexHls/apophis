@@ -17,7 +17,8 @@ using parthenon::X1DIR;
 using parthenon::X2DIR;
 using parthenon::X3DIR;
 
-// TODO(pgrete) temp fix to address removal in Parthenon. Update when merging with MHD
+// TODO(pgrete) temp fix to address removal in Parthenon. Update when merging
+// with MHD
 constexpr int NWAVE = 5;
 constexpr int NFIELD = 0;
 
@@ -31,9 +32,10 @@ Real gam, gm1, vflow;
 Real ev[NWAVE], rem[NWAVE][NWAVE], lem[NWAVE][NWAVE];
 
 // function to compute eigenvectors of linear waves
-void Eigensystem(const Real d, const Real v1, const Real v2, const Real v3, const Real h,
-                 const Real b1, const Real b2, const Real b3, const Real x, const Real y,
-                 Real eigenvalues[(NWAVE)], Real right_eigenmatrix[(NWAVE)][(NWAVE)],
+void Eigensystem(const Real d, const Real v1, const Real v2, const Real v3,
+                 const Real h, const Real b1, const Real b2, const Real b3,
+                 const Real x, const Real y, Real eigenvalues[(NWAVE)],
+                 Real right_eigenmatrix[(NWAVE)][(NWAVE)],
                  Real left_eigenmatrix[(NWAVE)][(NWAVE)]);
 
 Real MaxV2(MeshBlock *pmb, int iout);
@@ -56,8 +58,8 @@ void InitUserMeshData(Mesh *, ParameterInput *pin) {
   // For wavevector along coordinate axes, set desired values of ang_2/ang_3.
   //    For example, for 1D problem use ang_2 = ang_3 = 0.0
   //    For wavevector along grid diagonal, do not input values for ang_2/ang_3.
-  // Code below will automatically calculate these imposing periodicity and exactly one
-  // wavelength along each grid direction
+  // Code below will automatically calculate these imposing periodicity and
+  // exactly one wavelength along each grid direction
   // TODO (pgrete) technically the following is processed by the Mesh class.
   // However this function does not necessarily need to belong to Mesh so
   // the info is not readily available.
@@ -72,7 +74,8 @@ void InitUserMeshData(Mesh *, ParameterInput *pin) {
   Real x3size = x3max - x3min;
 
   // User should never input -999.9 in angles
-  if (ang_3 == -999.9) ang_3 = std::atan(x1size / x2size);
+  if (ang_3 == -999.9)
+    ang_3 = std::atan(x1size / x2size);
   sin_a3 = std::sin(ang_3);
   cos_a3 = std::cos(ang_3);
 
@@ -104,12 +107,16 @@ void InitUserMeshData(Mesh *, ParameterInput *pin) {
 
   // For lambda choose the smaller of the 3
   lambda = x1;
-  if (f2 && ang_3 != 0.0) lambda = std::min(lambda, x2);
-  if (f3 && ang_2 != 0.0) lambda = std::min(lambda, x3);
+  if (f2 && ang_3 != 0.0)
+    lambda = std::min(lambda, x2);
+  if (f3 && ang_2 != 0.0)
+    lambda = std::min(lambda, x3);
 
   // If cos_a2 or cos_a3 = 0, need to override lambda
-  if (ang_3_vert) lambda = x2;
-  if (ang_2_vert) lambda = x3;
+  if (ang_3_vert)
+    lambda = x2;
+  if (ang_2_vert)
+    lambda = x3;
 
   // Initialize k_parallel
   k_par = 2.0 * (M_PI) / lambda;
@@ -134,7 +141,8 @@ void InitUserMeshData(Mesh *, ParameterInput *pin) {
   Eigensystem(d0, u0, v0, w0, h0, bx0, by0, bz0, xfact, yfact, ev, rem, lem);
 
   // TODO(pgrete) see how to get access to the SimTime object outside the driver
-  // if (pin->GetOrAddBoolean("problem/linear_wave", "test", false) && ncycle == 0) {
+  // if (pin->GetOrAddBoolean("problem/linear_wave", "test", false) && ncycle ==
+  // 0) {
   if (pin->GetOrAddBoolean("problem/linear_wave", "test", false)) {
     // reinterpret tlim as the number of orbital periods
     Real tlim = pin->GetReal("parthenon/time", "tlim");
@@ -144,8 +152,10 @@ void InitUserMeshData(Mesh *, ParameterInput *pin) {
   }
 }
 
-void UserWorkAfterLoop(Mesh *mesh, ParameterInput *pin, parthenon::SimTime &tm) {
-  if (!pin->GetOrAddBoolean("problem/linear_wave", "compute_error", false)) return;
+void UserWorkAfterLoop(Mesh *mesh, ParameterInput *pin,
+                       parthenon::SimTime &tm) {
+  if (!pin->GetOrAddBoolean("problem/linear_wave", "compute_error", false))
+    return;
 
   // Initialize errors to zero
   Real l1_err[NHYDRO + NFIELD]{}, max_err[NHYDRO + NFIELD]{};
@@ -157,18 +167,19 @@ void UserWorkAfterLoop(Mesh *mesh, ParameterInput *pin, parthenon::SimTime &tm) 
     // Even for MHD, there are only cell-centered mesh variables
     int ncells4 = NHYDRO + NFIELD;
     // Save analytic solution of conserved variables in 4D scratch array on host
-    Kokkos::View<Real ****, parthenon::LayoutWrapper, parthenon::HostMemSpace> cons_(
-        "cons scratch", ncells4, pmb->cellbounds.ncellsk(IndexDomain::entire),
-        pmb->cellbounds.ncellsj(IndexDomain::entire),
-        pmb->cellbounds.ncellsi(IndexDomain::entire));
+    Kokkos::View<Real ****, parthenon::LayoutWrapper, parthenon::HostMemSpace>
+        cons_("cons scratch", ncells4,
+              pmb->cellbounds.ncellsk(IndexDomain::entire),
+              pmb->cellbounds.ncellsj(IndexDomain::entire),
+              pmb->cellbounds.ncellsi(IndexDomain::entire));
 
     //  Compute errors at cell centers
     for (int k = kb.s; k <= kb.e; k++) {
       for (int j = jb.s; j <= jb.e; j++) {
         for (int i = ib.s; i <= ib.e; i++) {
-          Real x =
-              cos_a2 * (pmb->coords.Xc<1>(i) * cos_a3 + pmb->coords.Xc<2>(j) * sin_a3) +
-              pmb->coords.Xc<3>(k) * sin_a2;
+          Real x = cos_a2 * (pmb->coords.Xc<1>(i) * cos_a3 +
+                             pmb->coords.Xc<2>(j) * sin_a3) +
+                   pmb->coords.Xc<3>(k) * sin_a2;
           Real sn = std::sin(k_par * x);
 
           Real d1 = d0 + amp * sn * rem[0][wave_flag];
@@ -185,7 +196,8 @@ void UserWorkAfterLoop(Mesh *mesh, ParameterInput *pin, parthenon::SimTime &tm) 
           cons_(IM2, k, j, i) = m2;
           cons_(IM3, k, j, i) = m3;
 
-          Real e0 = p0 / gm1 + 0.5 * d0 * u0 * u0 + amp * sn * rem[4][wave_flag];
+          Real e0 =
+              p0 / gm1 + 0.5 * d0 * u0 * u0 + amp * sn * rem[4][wave_flag];
           cons_(IEN, k, j, i) = e0;
         }
       }
@@ -196,7 +208,8 @@ void UserWorkAfterLoop(Mesh *mesh, ParameterInput *pin, parthenon::SimTime &tm) 
     for (int k = kb.s; k <= kb.e; ++k) {
       for (int j = jb.s; j <= jb.e; ++j) {
         for (int i = ib.s; i <= ib.e; ++i) {
-          // Load cell-averaged <U>, either midpoint approx. or fourth-order approx
+          // Load cell-averaged <U>, either midpoint approx. or fourth-order
+          // approx
           Real d1 = cons_(IDN, k, j, i);
           Real m1 = cons_(IM1, k, j, i);
           Real m2 = cons_(IM2, k, j, i);
@@ -205,22 +218,22 @@ void UserWorkAfterLoop(Mesh *mesh, ParameterInput *pin, parthenon::SimTime &tm) 
           Real vol = pmb->coords.CellVolume(k, j, i);
 
           l1_err[IDN] += std::abs(d1 - u(IDN, k, j, i)) * vol;
-          max_err[IDN] =
-              std::max(static_cast<Real>(std::abs(d1 - u(IDN, k, j, i))), max_err[IDN]);
+          max_err[IDN] = std::max(
+              static_cast<Real>(std::abs(d1 - u(IDN, k, j, i))), max_err[IDN]);
           l1_err[IM1] += std::abs(m1 - u(IM1, k, j, i)) * vol;
           l1_err[IM2] += std::abs(m2 - u(IM2, k, j, i)) * vol;
           l1_err[IM3] += std::abs(m3 - u(IM3, k, j, i)) * vol;
-          max_err[IM1] =
-              std::max(static_cast<Real>(std::abs(m1 - u(IM1, k, j, i))), max_err[IM1]);
-          max_err[IM2] =
-              std::max(static_cast<Real>(std::abs(m2 - u(IM2, k, j, i))), max_err[IM2]);
-          max_err[IM3] =
-              std::max(static_cast<Real>(std::abs(m3 - u(IM3, k, j, i))), max_err[IM3]);
+          max_err[IM1] = std::max(
+              static_cast<Real>(std::abs(m1 - u(IM1, k, j, i))), max_err[IM1]);
+          max_err[IM2] = std::max(
+              static_cast<Real>(std::abs(m2 - u(IM2, k, j, i))), max_err[IM2]);
+          max_err[IM3] = std::max(
+              static_cast<Real>(std::abs(m3 - u(IM3, k, j, i))), max_err[IM3]);
 
           Real e0 = cons_(IEN, k, j, i);
           l1_err[IEN] += std::abs(e0 - u(IEN, k, j, i)) * vol;
-          max_err[IEN] =
-              std::max(static_cast<Real>(std::abs(e0 - u(IEN, k, j, i))), max_err[IEN]);
+          max_err[IEN] = std::max(
+              static_cast<Real>(std::abs(e0 - u(IEN, k, j, i))), max_err[IEN]);
         }
       }
     }
@@ -229,15 +242,15 @@ void UserWorkAfterLoop(Mesh *mesh, ParameterInput *pin, parthenon::SimTime &tm) 
 
 #ifdef MPI_PARALLEL
   if (parthenon::Globals::my_rank == 0) {
-    MPI_Reduce(MPI_IN_PLACE, &l1_err, (NHYDRO + NFIELD), MPI_PARTHENON_REAL, MPI_SUM, 0,
-               MPI_COMM_WORLD);
-    MPI_Reduce(MPI_IN_PLACE, &max_err, (NHYDRO + NFIELD), MPI_PARTHENON_REAL, MPI_MAX, 0,
-               MPI_COMM_WORLD);
+    MPI_Reduce(MPI_IN_PLACE, &l1_err, (NHYDRO + NFIELD), MPI_PARTHENON_REAL,
+               MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(MPI_IN_PLACE, &max_err, (NHYDRO + NFIELD), MPI_PARTHENON_REAL,
+               MPI_MAX, 0, MPI_COMM_WORLD);
   } else {
-    MPI_Reduce(&l1_err, &l1_err, (NHYDRO + NFIELD), MPI_PARTHENON_REAL, MPI_SUM, 0,
-               MPI_COMM_WORLD);
-    MPI_Reduce(&max_err, &max_err, (NHYDRO + NFIELD), MPI_PARTHENON_REAL, MPI_MAX, 0,
-               MPI_COMM_WORLD);
+    MPI_Reduce(&l1_err, &l1_err, (NHYDRO + NFIELD), MPI_PARTHENON_REAL, MPI_SUM,
+               0, MPI_COMM_WORLD);
+    MPI_Reduce(&max_err, &max_err, (NHYDRO + NFIELD), MPI_PARTHENON_REAL,
+               MPI_MAX, 0, MPI_COMM_WORLD);
   }
 #endif
 
@@ -266,7 +279,8 @@ void UserWorkAfterLoop(Mesh *mesh, ParameterInput *pin, parthenon::SimTime &tm) 
     // The file exists -- reopen the file in append mode
     if ((pfile = std::fopen(fname.c_str(), "r")) != nullptr) {
       if ((pfile = std::freopen(fname.c_str(), "a", pfile)) == nullptr) {
-        msg << "### FATAL ERROR in function Mesh::UserWorkAfterLoop" << std::endl
+        msg << "### FATAL ERROR in function Mesh::UserWorkAfterLoop"
+            << std::endl
             << "Error output file could not be opened" << std::endl;
         PARTHENON_FAIL(msg);
       }
@@ -274,13 +288,15 @@ void UserWorkAfterLoop(Mesh *mesh, ParameterInput *pin, parthenon::SimTime &tm) 
       // The file does not exist -- open the file in write mode and add headers
     } else {
       if ((pfile = std::fopen(fname.c_str(), "w")) == nullptr) {
-        msg << "### FATAL ERROR in function Mesh::UserWorkAfterLoop" << std::endl
+        msg << "### FATAL ERROR in function Mesh::UserWorkAfterLoop"
+            << std::endl
             << "Error output file could not be opened" << std::endl;
         PARTHENON_FAIL(msg);
       }
       std::fprintf(pfile, "# Nx1  Nx2  Nx3  Ncycle  ");
       std::fprintf(pfile, "RMS-L1-Error  d_L1  M1_L1  M2_L1  M3_L1  E_L1 ");
-      std::fprintf(pfile, "  Largest-Max/L1  d_max  M1_max  M2_max  M3_max  E_max ");
+      std::fprintf(pfile,
+                   "  Largest-Max/L1  d_max  M1_max  M2_max  M3_max  E_max ");
       std::fprintf(pfile, "\n");
     }
 
@@ -302,8 +318,8 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
   IndexRange ib = pmb->cellbounds.GetBoundsI(IndexDomain::interior);
   IndexRange jb = pmb->cellbounds.GetBoundsJ(IndexDomain::interior);
   IndexRange kb = pmb->cellbounds.GetBoundsK(IndexDomain::interior);
-  // Initialize the magnetic fields.  Note wavevector, eigenvectors, and other variables
-  // are set in InitUserMeshData
+  // Initialize the magnetic fields.  Note wavevector, eigenvectors, and other
+  // variables are set in InitUserMeshData
 
   // initialize conserved variables
   auto &rc = pmb->meshblock_data.Get();
@@ -314,19 +330,23 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
   for (int k = kb.s; k <= kb.e; k++) {
     for (int j = jb.s; j <= jb.e; j++) {
       for (int i = ib.s; i <= ib.e; i++) {
-        Real x = cos_a2 * (coords.Xc<1>(i) * cos_a3 + coords.Xc<2>(j) * sin_a3) +
-                 coords.Xc<3>(k) * sin_a2;
+        Real x =
+            cos_a2 * (coords.Xc<1>(i) * cos_a3 + coords.Xc<2>(j) * sin_a3) +
+            coords.Xc<3>(k) * sin_a2;
         Real sn = std::sin(k_par * x);
         u(IDN, k, j, i) = d0 + amp * sn * rem[0][wave_flag];
         Real mx = d0 * vflow + amp * sn * rem[1][wave_flag];
         Real my = amp * sn * rem[2][wave_flag];
         Real mz = amp * sn * rem[3][wave_flag];
 
-        u(IM1, k, j, i) = mx * cos_a2 * cos_a3 - my * sin_a3 - mz * sin_a2 * cos_a3;
-        u(IM2, k, j, i) = mx * cos_a2 * sin_a3 + my * cos_a3 - mz * sin_a2 * sin_a3;
+        u(IM1, k, j, i) =
+            mx * cos_a2 * cos_a3 - my * sin_a3 - mz * sin_a2 * cos_a3;
+        u(IM2, k, j, i) =
+            mx * cos_a2 * sin_a3 + my * cos_a3 - mz * sin_a2 * sin_a3;
         u(IM3, k, j, i) = mx * sin_a2 + mz * cos_a2;
 
-        u(IEN, k, j, i) = p0 / gm1 + 0.5 * d0 * u0 * u0 + amp * sn * rem[4][wave_flag];
+        u(IEN, k, j, i) =
+            p0 / gm1 + 0.5 * d0 * u0 * u0 + amp * sn * rem[4][wave_flag];
       }
     }
   }
@@ -334,9 +354,10 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
   u_dev.DeepCopy(u);
 }
 
-void Eigensystem(const Real d, const Real v1, const Real v2, const Real v3, const Real h,
-                 const Real b1, const Real b2, const Real b3, const Real x, const Real y,
-                 Real eigenvalues[(NWAVE)], Real right_eigenmatrix[(NWAVE)][(NWAVE)],
+void Eigensystem(const Real d, const Real v1, const Real v2, const Real v3,
+                 const Real h, const Real b1, const Real b2, const Real b3,
+                 const Real x, const Real y, Real eigenvalues[(NWAVE)],
+                 Real right_eigenmatrix[(NWAVE)][(NWAVE)],
                  Real left_eigenmatrix[(NWAVE)][(NWAVE)]) {
   //--- Adiabatic Hydrodynamics ---
   Real vsq = v1 * v1 + v2 * v2 + v3 * v3;

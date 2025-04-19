@@ -10,7 +10,8 @@ using namespace parthenon::package::prelude;
 
 namespace Apophis {
 
-TaskStatus ReinitializeLset(std::shared_ptr<MeshData<Real>> &md, const int lset_id);
+TaskStatus ReinitializeLset(std::shared_ptr<MeshData<Real>> &md,
+                            const int lset_id);
 
 } // namespace Apophis
 

@@ -20,7 +20,7 @@ enum {
 };
 
 enum {
-  LIFL = 0, // fuel
+  LIFL = 0,  // fuel
   LIDST = 1, // dist
 };
 
@@ -55,6 +55,7 @@ enum class Gravity {
   undefined,
   none,
   constant,
+  poisson,
 };
 
 constexpr parthenon::Real float_min{std::numeric_limits<float>::min()};
