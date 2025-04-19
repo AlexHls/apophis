@@ -13,13 +13,14 @@ using parthenon::ScratchPad2D;
 //----------------------------------------------------------------------------------------
 //! \fn void Hydro::RiemannSolver
 //  \brief The HLLE Riemann solver for hydrodynamics (adiabatic)
-template <> struct Riemann<Fluid::euler, RiemannSolver::hlle> {
+template <>
+struct Riemann<Fluid::euler, RiemannSolver::hlle> {
   KOKKOS_FORCEINLINE_FUNCTION void static Solve(
-      parthenon::team_mbr_t const &member, const int k, const int j,
-      const int il, const int iu, const int ivx, const ScratchPad2D<Real> &wl,
+      parthenon::team_mbr_t const &member, const int k, const int j, const int il,
+      const int iu, const int ivx, const ScratchPad2D<Real> &wl,
       const ScratchPad2D<Real> &wr, parthenon::VariableFluxPack<Real> &cons,
-      const ScratchPad2D<Real> &ifl, const ScratchPad2D<Real> &ifr,
-      const EOS_t &eos, parthenon::VariablePack<Real> &eos_lambda) {
+      const ScratchPad2D<Real> &ifl, const ScratchPad2D<Real> &ifr, const EOS_t &eos,
+      parthenon::VariablePack<Real> &eos_lambda) {
     int ivy = IV1 + ((ivx - IV1) + 1) % 3;
     int ivz = IV1 + ((ivx - IV1) + 2) % 3;
     static constexpr Real C_LIGHT = 2.99792458e10;
@@ -60,11 +61,9 @@ template <> struct Riemann<Fluid::euler, RiemannSolver::hlle> {
       igm1r = 1.0 / gm1r;
 
       Real cl = C_LIGHT *
-                std::sqrt(gammal /
-                          (1 + (igm1l + wli[IDN] * SQR(C_LIGHT) / wli[IPR])));
+                std::sqrt(gammal / (1 + (igm1l + wli[IDN] * SQR(C_LIGHT) / wli[IPR])));
       Real cr = C_LIGHT *
-                std::sqrt(gammar /
-                          (1 + (igm1r + wri[IDN] * SQR(C_LIGHT) / wri[IPR])));
+                std::sqrt(gammar / (1 + (igm1r + wri[IDN] * SQR(C_LIGHT) / wri[IPR])));
 
       el = wli[IPR] * igm1l +
            0.5 * wli[IDN] * (SQR(wli[IV1]) + SQR(wli[IV2]) + SQR(wli[IV3]));
@@ -72,21 +71,19 @@ template <> struct Riemann<Fluid::euler, RiemannSolver::hlle> {
            0.5 * wri[IDN] * (SQR(wri[IV1]) + SQR(wri[IV2]) + SQR(wri[IV3]));
       Real rhoa = .5 * (wli[IDN] + wri[IDN]); // average density
       Real ca = .5 * (cl + cr);               // average sound speed
-      Real pmid =
-          .5 * (wli[IPR] + wri[IPR] + (wli[IV1] - wri[IV1]) * rhoa * ca);
-      Real umid =
-          .5 * (wli[IV1] + wri[IV1] + (wli[IPR] - wri[IPR]) / (rhoa * ca));
+      Real pmid = .5 * (wli[IPR] + wri[IPR] + (wli[IV1] - wri[IV1]) * rhoa * ca);
+      Real umid = .5 * (wli[IV1] + wri[IV1] + (wli[IPR] - wri[IPR]) / (rhoa * ca));
       Real rhol = wli[IDN] + (wli[IV1] - umid) * rhoa / ca; // mid-left density
       Real rhor = wri[IDN] + (umid - wri[IV1]) * rhoa / ca; // mid-right density
 
       //--- Step 3.  Compute sound speed in L,R
       Real ql, qr;
-      ql = (pmid <= wli[IPR]) ? 1.0
-                              : (1.0 + (gammal + 1) / std::sqrt(2 * gammal) *
-                                           (pmid / wli[IPR] - 1.0));
-      qr = (pmid <= wri[IPR]) ? 1.0
-                              : (1.0 + (gammar + 1) / std::sqrt(2 * gammar) *
-                                           (pmid / wri[IPR] - 1.0));
+      ql = (pmid <= wli[IPR])
+               ? 1.0
+               : (1.0 + (gammal + 1) / std::sqrt(2 * gammal) * (pmid / wli[IPR] - 1.0));
+      qr = (pmid <= wri[IPR])
+               ? 1.0
+               : (1.0 + (gammar + 1) / std::sqrt(2 * gammar) * (pmid / wri[IPR] - 1.0));
 
       //--- Step 4. Compute the max/min wave speeds based on L/R states
 
@@ -120,8 +117,7 @@ template <> struct Riemann<Fluid::euler, RiemannSolver::hlle> {
 
       //--- Step 6. Compute the HLLE flux at interface.
       Real tmp = 0.0;
-      if (bp != bm)
-        tmp = 0.5 * (bp + bm) / (bp - bm);
+      if (bp != bm) tmp = 0.5 * (bp + bm) / (bp - bm);
 
       flxi[IDN] = 0.5 * (fl[IDN] + fr[IDN]) + (fl[IDN] - fr[IDN]) * tmp;
       flxi[IV1] = 0.5 * (fl[IV1] + fr[IV1]) + (fl[IV1] - fr[IV1]) * tmp;

@@ -36,8 +36,7 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
   // initializing on host
   auto u = u_dev.GetHostMirrorAndCopy();
 
-  std::mt19937 gen(
-      pmb->gid); // Standard mersenne_twister_engine seeded with gid
+  std::mt19937 gen(pmb->gid); // Standard mersenne_twister_engine seeded with gid
   std::uniform_real_distribution<Real> ran(-0.5, 0.5);
 
   //--- iprob=1.  Uniform stream with density ratio "drat" located in region
@@ -64,8 +63,8 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
           }
           // Pressure scaled to give a sound speed of 1 with gamma=1.4
           u(IEN, k, j, i) =
-              2.5 / gm1 + 0.5 * (SQR(u(IM1, k, j, i)) + SQR(u(IM2, k, j, i))) /
-                              u(IDN, k, j, i);
+              2.5 / gm1 +
+              0.5 * (SQR(u(IM1, k, j, i)) + SQR(u(IM2, k, j, i))) / u(IDN, k, j, i);
         }
       }
     }
@@ -90,8 +89,8 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
                             std::exp(-(SQR(coords.Xc<2>(j))) / SQR(sigma));
           u(IM3, k, j, i) = 0.0;
           u(IEN, k, j, i) =
-              1.0 / gm1 + 0.5 * (SQR(u(IM1, k, j, i)) + SQR(u(IM2, k, j, i))) /
-                              u(IDN, k, j, i);
+              1.0 / gm1 +
+              0.5 * (SQR(u(IM1, k, j, i)) + SQR(u(IM2, k, j, i))) / u(IDN, k, j, i);
         }
       }
     }
@@ -113,21 +112,18 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
         for (int i = ib.s; i <= ib.e; i++) {
           u(IDN, k, j, i) =
               0.505 + 0.495 * std::tanh((std::abs(coords.Xc<2>(j)) - 0.5) / a);
-          u(IM1, k, j, i) =
-              vflow * std::tanh((std::abs(coords.Xc<2>(j)) - 0.5) / a);
-          u(IM2, k, j, i) = amp * vflow *
-                            std::sin(2.0 * M_PI * coords.Xc<1>(i)) *
+          u(IM1, k, j, i) = vflow * std::tanh((std::abs(coords.Xc<2>(j)) - 0.5) / a);
+          u(IM2, k, j, i) = amp * vflow * std::sin(2.0 * M_PI * coords.Xc<1>(i)) *
                             std::exp(-((std::abs(coords.Xc<2>(j)) - 0.5) *
                                        (std::abs(coords.Xc<2>(j)) - 0.5)) /
                                      (sigma * sigma));
-          if (coords.Xc<2>(j) < 0.0)
-            u(IM2, k, j, i) *= -1.0;
+          if (coords.Xc<2>(j) < 0.0) u(IM2, k, j, i) *= -1.0;
           u(IM1, k, j, i) *= u(IDN, k, j, i);
           u(IM2, k, j, i) *= u(IDN, k, j, i);
           u(IM3, k, j, i) = 0.0;
           u(IEN, k, j, i) =
-              1.0 / gm1 + 0.5 * (SQR(u(IM1, k, j, i)) + SQR(u(IM2, k, j, i))) /
-                              u(IDN, k, j, i);
+              1.0 / gm1 +
+              0.5 * (SQR(u(IM1, k, j, i)) + SQR(u(IM2, k, j, i))) / u(IDN, k, j, i);
         }
       }
     }
@@ -222,18 +218,17 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
 
           // translated x1= x - 1/2 relative to Lecoanet (2015) shifts sine
           // function by pi (half-period) and introduces U_z sign change:
-          Real v2 = -amp * ave_sine *
-                    (std::exp(-(SQR(coords.Xc<2>(j) - z1)) / (sigma * sigma)) +
-                     std::exp(-(SQR(coords.Xc<2>(j) - z2)) /
-                              (sigma * sigma))); // 8c), mod.
+          Real v2 =
+              -amp * ave_sine *
+              (std::exp(-(SQR(coords.Xc<2>(j) - z1)) / (sigma * sigma)) +
+               std::exp(-(SQR(coords.Xc<2>(j) - z2)) / (sigma * sigma))); // 8c), mod.
           u(IM2, k, j, i) = v2 * dens;
 
           u(IM3, k, j, i) = 0.0;
           u(IEN, k, j, i) =
-              P0 / gm1 + 0.5 *
-                             (SQR(u(IM1, k, j, i)) + SQR(u(IM2, k, j, i)) +
-                              SQR(u(IM3, k, j, i))) /
-                             u(IDN, k, j, i);
+              P0 / gm1 +
+              0.5 * (SQR(u(IM1, k, j, i)) + SQR(u(IM2, k, j, i)) + SQR(u(IM3, k, j, i))) /
+                  u(IDN, k, j, i);
         }
       }
     }
@@ -254,19 +249,17 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
     for (int k = kb.s; k <= kb.e; k++) {
       for (int j = jb.s; j <= jb.e; j++) {
         for (int i = ib.s; i <= ib.e; i++) {
-          Real w =
-              (std::tanh((std::abs(coords.Xc<2>(j)) - 0.25) / a) + 1.0) * 0.5;
+          Real w = (std::tanh((std::abs(coords.Xc<2>(j)) - 0.25) / a) + 1.0) * 0.5;
           u(IDN, k, j, i) = w + (1.0 - w) * drat;
           u(IM1, k, j, i) = w * vflow - (1.0 - w) * vflow * drat;
-          u(IM2, k, j, i) = u(IDN, k, j, i) * amp *
-                            std::sin(2.0 * 2.0 * M_PI * coords.Xc<1>(i)) *
-                            std::exp(-SQR(std::abs(coords.Xc<2>(j)) - 0.25) /
-                                     (sigma * sigma));
+          u(IM2, k, j, i) =
+              u(IDN, k, j, i) * amp * std::sin(2.0 * 2.0 * M_PI * coords.Xc<1>(i)) *
+              std::exp(-SQR(std::abs(coords.Xc<2>(j)) - 0.25) / (sigma * sigma));
           u(IM3, k, j, i) = 0.0;
           // Pressure scaled to give a sound speed of 1 with gamma=1.4
           u(IEN, k, j, i) =
-              2.5 / gm1 + 0.25 * (SQR(u(IM1, k, j, i)) + SQR(u(IM2, k, j, i))) /
-                              u(IDN, k, j, i);
+              2.5 / gm1 +
+              0.25 * (SQR(u(IM1, k, j, i)) + SQR(u(IM2, k, j, i))) / u(IDN, k, j, i);
         }
       }
     }
@@ -312,8 +305,8 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
               (0.25 - std::abs(coords.Xc<2>(j))) * u(IDN, k, j, i); // lset1
           // Pressure scaled to give a sound speed of 1 with gamma=1.4
           u(IEN, k, j, i) =
-              pamp / gm1 + 0.5 * (SQR(u(IM1, k, j, i)) + SQR(u(IM2, k, j, i))) /
-                               u(IDN, k, j, i);
+              pamp / gm1 +
+              0.5 * (SQR(u(IM1, k, j, i)) + SQR(u(IM2, k, j, i))) / u(IDN, k, j, i);
         }
       }
     }

@@ -13,14 +13,14 @@ namespace Apophis {
 struct GravitySolver {
   explicit GravitySolver(ParameterInput *pin) : pin_(pin) {}
   virtual ~GravitySolver() = default;
-  virtual TaskID AddTasks(TaskList &tl, TaskID dependence, Mesh *pmesh) = 0;
+  virtual TaskID AddTasks(TaskList &tl, TaskID dependence, Mesh *pmesh,
+                          const int partition) = 0;
 
-  protected:
+ protected:
   ParameterInput *pin_;
 };
 
-std::shared_ptr<parthenon::StateDescriptor>
-InitializeGravity(ParameterInput *pin);
+std::shared_ptr<parthenon::StateDescriptor> InitializeGravity(ParameterInput *pin);
 
 TaskStatus ApplyGravity(std::shared_ptr<MeshData<Real>> &md, const Real dt);
 

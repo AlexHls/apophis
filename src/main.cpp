@@ -23,8 +23,7 @@ int main(int argc, char *argv[]) {
   }
 
   pman.app_input->ProcessPackages = Apophis::ProcessPackages;
-  const auto problem =
-      pman.pinput->GetOrAddString("job", "problem_id", "unset");
+  const auto problem = pman.pinput->GetOrAddString("job", "problem_id", "unset");
   if (problem == "sod") {
     pman.app_input->ProblemGenerator = sod::ProblemGenerator;
   } else if (problem == "linear_wave") {

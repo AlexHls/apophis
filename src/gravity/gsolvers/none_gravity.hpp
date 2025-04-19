@@ -12,7 +12,8 @@ struct NoneGravitySolver : GravitySolver {
 
   explicit NoneGravitySolver(ParameterInput *pin) : GravitySolver(pin) {}
 
-  TaskID AddTasks(TaskList &tl, TaskID dependence, Mesh *pmesh) override {
+  TaskID AddTasks(TaskList &tl, TaskID dependence, Mesh *pmesh,
+                  const int partition) override {
     // No tasks to add for None gravity
     return dependence;
   }

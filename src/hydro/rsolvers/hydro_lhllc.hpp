@@ -10,13 +10,14 @@
 using parthenon::Real;
 using parthenon::ScratchPad2D;
 
-template <> struct Riemann<Fluid::euler, RiemannSolver::lhllc> {
+template <>
+struct Riemann<Fluid::euler, RiemannSolver::lhllc> {
   static KOKKOS_FORCEINLINE_FUNCTION void
-  Solve(parthenon::team_mbr_t const &member, const int k, const int j,
-        const int il, const int iu, const int ivx, const ScratchPad2D<Real> &wl,
+  Solve(parthenon::team_mbr_t const &member, const int k, const int j, const int il,
+        const int iu, const int ivx, const ScratchPad2D<Real> &wl,
         const ScratchPad2D<Real> &wr, parthenon::VariableFluxPack<Real> &cons,
-        const ScratchPad2D<Real> &ifl, const ScratchPad2D<Real> &ifr,
-        const EOS_t &eos, parthenon::VariablePack<Real> &eos_lambda) {
+        const ScratchPad2D<Real> &ifl, const ScratchPad2D<Real> &ifr, const EOS_t &eos,
+        parthenon::VariablePack<Real> &eos_lambda) {
     int ivy = IV1 + ((ivx - IV1) + 1) % 3;
     int ivz = IV1 + ((ivx - IV1) + 2) % 3;
     static constexpr Real C_LIGHT = 2.99792458e10;
@@ -55,41 +56,37 @@ template <> struct Riemann<Fluid::euler, RiemannSolver::lhllc> {
       igm1r = 1.0 / gm1r;
 
       Real cl = C_LIGHT *
-                std::sqrt(gammal /
-                          (1 + (igm1l + wli[IDN] * SQR(C_LIGHT) / wli[IPR])));
+                std::sqrt(gammal / (1 + (igm1l + wli[IDN] * SQR(C_LIGHT) / wli[IPR])));
       Real cr = C_LIGHT *
-                std::sqrt(gammar /
-                          (1 + (igm1r + wri[IDN] * SQR(C_LIGHT) / wri[IPR])));
+                std::sqrt(gammar / (1 + (igm1r + wri[IDN] * SQR(C_LIGHT) / wri[IPR])));
 
-      Real el =
-          wli[IPR] * igm1l +
-          0.5 * wli[IDN] * (SQR(wli[IV1]) + SQR(wli[IV2]) + SQR(wli[IV3]));
-      Real er =
-          wri[IPR] * igm1r +
-          0.5 * wri[IDN] * (SQR(wri[IV1]) + SQR(wri[IV2]) + SQR(wri[IV3]));
+      Real el = wli[IPR] * igm1l +
+                0.5 * wli[IDN] * (SQR(wli[IV1]) + SQR(wli[IV2]) + SQR(wli[IV3]));
+      Real er = wri[IPR] * igm1r +
+                0.5 * wri[IDN] * (SQR(wri[IV1]) + SQR(wri[IV2]) + SQR(wri[IV3]));
       Real rhoa = .5 * (wli[IDN] + wri[IDN]); // average density
       Real ca = .5 * (cl + cr);               // average sound speed
 
       // Compute low mach correction
-      Real machl = std::sqrt(wli[IV1] * wli[IV1] + wli[IV2] * wli[IV2] +
-                             wli[IV3] * wli[IV3]);
-      Real machr = std::sqrt(wri[IV1] * wri[IV1] + wri[IV2] * wri[IV2] +
-                             wri[IV3] * wri[IV3]);
+      Real machl =
+          std::sqrt(wli[IV1] * wli[IV1] + wli[IV2] * wli[IV2] + wli[IV3] * wli[IV3]);
+      Real machr =
+          std::sqrt(wri[IV1] * wri[IV1] + wri[IV2] * wri[IV2] + wri[IV3] * wri[IV3]);
       Real chi = std::max(machl, machr);
       Real phi = chi * (2.0 - chi);
 
-      Real pstar = .5 * (wli[IPR] + wri[IPR]) -
-                   .5 * (wri[IV1] - wli[IV1]) * rhoa * ca * phi;
+      Real pstar =
+          .5 * (wli[IPR] + wri[IPR]) - .5 * (wri[IV1] - wli[IV1]) * rhoa * ca * phi;
 
       //--- Step 3.  Wave speed estimates
       Real ql, qr;
       Real sl, sr, sstar;
-      ql = (pstar <= wli[IPR]) ? 1.0
-                               : std::sqrt(1.0 + (gammal + 1) / (2 * gammar) *
-                                                     (pstar / wli[IPR] - 1.0));
-      qr = (pstar <= wri[IPR]) ? 1.0
-                               : std::sqrt(1.0 + (gammal + 1) / (2 * gammar) *
-                                                     (pstar / wri[IPR] - 1.0));
+      ql = (pstar <= wli[IPR])
+               ? 1.0
+               : std::sqrt(1.0 + (gammal + 1) / (2 * gammar) * (pstar / wli[IPR] - 1.0));
+      qr = (pstar <= wri[IPR])
+               ? 1.0
+               : std::sqrt(1.0 + (gammal + 1) / (2 * gammar) * (pstar / wri[IPR] - 1.0));
 
       sl = wli[IV1] - cl * ql;
       sr = wri[IV1] + cr * qr;

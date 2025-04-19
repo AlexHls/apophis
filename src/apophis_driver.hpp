@@ -10,11 +10,10 @@ using namespace parthenon::driver::prelude;
 
 namespace Apophis {
 
-parthenon::Packages_t
-ProcessPackages(std::unique_ptr<parthenon::ParameterInput> &pin);
+parthenon::Packages_t ProcessPackages(std::unique_ptr<parthenon::ParameterInput> &pin);
 
 class ApophisDriver : public parthenon::MultiStageDriver {
-public:
+ public:
   ApophisDriver(ParameterInput *pin, ApplicationInput *app_in, Mesh *pm);
 
   auto MakeTaskCollection(BlockList_t &blocks, int stage) -> TaskCollection;

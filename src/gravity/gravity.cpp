@@ -1,8 +1,9 @@
 #include "gravity.hpp"
-#include "gsolvers/none_gravity.hpp"
-#include "gsolvers/constant_gravity.hpp"
 #include "../main.hpp"
 #include "KokkosCore_Config_SetupBackend.hpp"
+#include "gsolvers/constant_gravity.hpp"
+#include "gsolvers/none_gravity.hpp"
+#include "gsolvers/poisson_gravity.hpp"
 #include "interface/state_descriptor.hpp"
 
 #include "parthenon/package.hpp"
@@ -12,8 +13,7 @@ using namespace parthenon::driver::prelude;
 
 namespace Apophis {
 
-std::shared_ptr<parthenon::StateDescriptor>
-InitializeGravity(ParameterInput *pin) {
+std::shared_ptr<parthenon::StateDescriptor> InitializeGravity(ParameterInput *pin) {
   auto pkg = std::make_shared<parthenon::StateDescriptor>("Gravity");
   const auto gravity_str = pin->GetOrAddString("gravity", "type", "none");
   auto gravity = Gravity::undefined;
@@ -25,6 +25,9 @@ InitializeGravity(ParameterInput *pin) {
   } else if (gravity_str == "constant") {
     gravity = Gravity::constant;
     solver = std::make_shared<ConstantGravitySolver>(pin);
+  } else if (gravity_str == "poisson") {
+    gravity = Gravity::poisson;
+    solver = std::make_shared<PoissonGravitySolver>(pin);
   } else {
     PARTHENON_FAIL("[Apophis]: Gravity not recognized. Exiting.");
   }
@@ -38,12 +41,31 @@ InitializeGravity(ParameterInput *pin) {
   labels[0] = "gx";
   labels[1] = "gy";
   labels[2] = "gz";
-  auto m = parthenon::Metadata(
-      {parthenon::Metadata::Cell, parthenon::Metadata::Derived,
-       parthenon::Metadata::Intensive, parthenon::Metadata::FillGhost},
-      std::vector<int>({3}), labels);
+  auto m = parthenon::Metadata({parthenon::Metadata::Cell, parthenon::Metadata::Derived,
+                                parthenon::Metadata::Intensive,
+                                parthenon::Metadata::FillGhost},
+                               std::vector<int>({3}), labels);
 
   pkg->AddField(field_name, m);
+
+  // If poisson solver, add the potential field and set solver settings
+  if (gravity == Gravity::poisson) {
+    field_name = "potential";
+    labels[0] = "phi";
+    auto m = parthenon::Metadata({parthenon::Metadata::Cell, parthenon::Metadata::Derived,
+                                  parthenon::Metadata::FillGhost},
+                                 std::vector<int>({1}), labels);
+    pkg->AddField(field_name, m);
+
+    std::string solver = pin->GetOrAddString("gravity", "solver", "MGBiCGSTAB");
+    pkg->AddParam<>("solver", solver);
+
+    Real err_tol = pin->GetOrAddReal("gravity", "err_tol", 1.0e-8);
+    pkg->AddParam<>("err_tol", err_tol);
+
+    bool use_exact_rhs = pin->GetOrAddBoolean("gravity", "use_exact_rhs", false);
+    pkg->AddParam<>("use_exact_rhs", use_exact_rhs);
+  }
 
   return pkg;
 }
@@ -59,8 +81,8 @@ TaskStatus ApplyGravity(std::shared_ptr<MeshData<Real>> &md, const Real dt) {
   auto kb = cellbounds.GetBoundsK(IndexDomain::interior);
 
   pmb->par_for(
-      "UpdateGravity", 0, cons_pack.GetDim(5) - 1, kb.s, kb.e, jb.s, jb.e, ib.s,
-      ib.e, KOKKOS_LAMBDA(const int b, const int k, const int j, const int i) {
+      "UpdateGravity", 0, cons_pack.GetDim(5) - 1, kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
+      KOKKOS_LAMBDA(const int b, const int k, const int j, const int i) {
         auto &cons = cons_pack(b);
         const auto w = prim_pack(b);
         const auto &grav = grav_pack(b);
@@ -68,10 +90,10 @@ TaskStatus ApplyGravity(std::shared_ptr<MeshData<Real>> &md, const Real dt) {
         cons(IM1, k, j, i) += grav(0, k, j, i) * w(IDN, k, j, i) * dt;
         cons(IM2, k, j, i) += grav(1, k, j, i) * w(IDN, k, j, i) * dt;
         cons(IM3, k, j, i) += grav(2, k, j, i) * w(IDN, k, j, i) * dt;
-        cons(IEN, k, j, i) += (grav(0, k, j, i) * w(IV1, k, j, i) +
-                               grav(1, k, j, i) * w(IV2, k, j, i) +
-                               grav(2, k, j, i) * w(IV3, k, j, i)) *
-                              w(IDN, k, j, i) * dt;
+        cons(IEN, k, j, i) +=
+            (grav(0, k, j, i) * w(IV1, k, j, i) + grav(1, k, j, i) * w(IV2, k, j, i) +
+             grav(2, k, j, i) * w(IV3, k, j, i)) *
+            w(IDN, k, j, i) * dt;
       });
 
   return TaskStatus::complete;

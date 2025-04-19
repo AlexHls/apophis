@@ -12,7 +12,8 @@ struct ConstantGravitySolver : GravitySolver {
 
   explicit ConstantGravitySolver(ParameterInput *pin) : GravitySolver(pin) {}
 
-  TaskID AddTasks(TaskList &tl, TaskID dependence, Mesh *pmesh) override {
+  TaskID AddTasks(TaskList &tl, TaskID dependence, Mesh *pmesh,
+                  const int partition) override {
     // Nothing to do here, gravity is constant
     // and does not need to be updated
     return dependence;

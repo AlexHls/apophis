@@ -11,12 +11,13 @@ using namespace parthenon::package::prelude;
 
 namespace Apophis {
 
-TaskStatus Burn(std::shared_ptr<MeshData<Real>> &md, const int nlset,
-                const Real dt);
+TaskStatus Burn(std::shared_ptr<MeshData<Real>> &md, const int nlset, const Real dt);
 
-template <Fluid fluid> constexpr Real GetEBind(int i);
+template <Fluid fluid>
+constexpr Real GetEBind(int i);
 
-template <> constexpr Real GetEBind<Fluid::euler>(int i) {
+template <>
+constexpr Real GetEBind<Fluid::euler>(int i) {
   switch (i) {
   case 0:
     return 6.8266e+18;

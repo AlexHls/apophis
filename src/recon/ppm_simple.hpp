@@ -29,8 +29,8 @@ using parthenon::Real;
 using parthenon::ScratchPad2D;
 
 KOKKOS_INLINE_FUNCTION
-void PPM(const Real &q_im2, const Real &q_im1, const Real &q_i,
-         const Real &q_ip1, const Real &q_ip2, Real &ql_ip1, Real &qr_i) {
+void PPM(const Real &q_im2, const Real &q_im1, const Real &q_i, const Real &q_ip1,
+         const Real &q_ip2, Real &ql_ip1, Real &qr_i) {
 
   // CS08 constant used in second derivative limiter, >1 , independent of h
   const Real C2 = 1.25;
@@ -67,8 +67,8 @@ void PPM(const Real &q_im2, const Real &q_im1, const Real &q_i,
   Real qc = d2qc;                       // (CD eq 85c) (no 1/2)
   Real qd = 0.0;
   if (SIGN(qa) == SIGN(qb) && SIGN(qa) == SIGN(qc)) {
-    qd = SIGN(qa) *
-         std::min(C2 * std::abs(qb), std::min(C2 * std::abs(qc), std::abs(qa)));
+    qd =
+        SIGN(qa) * std::min(C2 * std::abs(qb), std::min(C2 * std::abs(qc), std::abs(qa)));
   }
   Real dph_tmp = 0.5 * (q_im1 + q_i) - qd / 6.0;
   if (qa_tmp * qb_tmp < 0.0) { // Local extrema detected at i-1/2 face
@@ -84,8 +84,8 @@ void PPM(const Real &q_im2, const Real &q_im1, const Real &q_i,
   qc = d2qc_ip1;                            // (CD eq 85c) (no 1/2)
   qd = 0.0;
   if (SIGN(qa) == SIGN(qb) && SIGN(qa) == SIGN(qc)) {
-    qd = SIGN(qa) *
-         std::min(C2 * std::abs(qb), std::min(C2 * std::abs(qc), std::abs(qa)));
+    qd =
+        SIGN(qa) * std::min(C2 * std::abs(qb), std::min(C2 * std::abs(qc), std::abs(qa)));
   }
   Real dphip1_tmp = 0.5 * (q_i + q_ip1) - qd / 6.0;
   if (qa_tmp * qb_tmp < 0.0) { // Local extrema detected at i+1/2 face
@@ -161,27 +161,25 @@ void PPM(const Real &q_im2, const Real &q_im1, const Real &q_i,
 }
 
 template <Reconstruction recon, int XNDIR>
-KOKKOS_INLINE_FUNCTION
-    typename std::enable_if<recon == Reconstruction::ppm, void>::type
-    Reconstruct(parthenon::team_mbr_t const &member, const int k, const int j,
-                const int il, const int iu,
-                const parthenon::VariablePack<Real> &q, ScratchPad2D<Real> &ql,
-                ScratchPad2D<Real> &qr) {
+KOKKOS_INLINE_FUNCTION typename std::enable_if<recon == Reconstruction::ppm, void>::type
+Reconstruct(parthenon::team_mbr_t const &member, const int k, const int j, const int il,
+            const int iu, const parthenon::VariablePack<Real> &q, ScratchPad2D<Real> &ql,
+            ScratchPad2D<Real> &qr) {
   const auto nvar = q.GetDim(4);
   for (auto n = 0; n < nvar; ++n) {
     parthenon::par_for_inner(member, il, iu, [&](const int i) {
       if constexpr (XNDIR == parthenon::X1DIR) {
         // ql is ql_ip1 and qr is qr_i
-        PPM(q(n, k, j, i - 2), q(n, k, j, i - 1), q(n, k, j, i),
-            q(n, k, j, i + 1), q(n, k, j, i + 2), ql(n, i + 1), qr(n, i));
+        PPM(q(n, k, j, i - 2), q(n, k, j, i - 1), q(n, k, j, i), q(n, k, j, i + 1),
+            q(n, k, j, i + 2), ql(n, i + 1), qr(n, i));
       } else if constexpr (XNDIR == parthenon::X2DIR) {
         // ql is ql_jp1 and qr is qr_j
-        PPM(q(n, k, j - 2, i), q(n, k, j - 1, i), q(n, k, j, i),
-            q(n, k, j + 1, i), q(n, k, j + 2, i), ql(n, i), qr(n, i));
+        PPM(q(n, k, j - 2, i), q(n, k, j - 1, i), q(n, k, j, i), q(n, k, j + 1, i),
+            q(n, k, j + 2, i), ql(n, i), qr(n, i));
       } else if constexpr (XNDIR == parthenon::X3DIR) {
         // ql is ql_kp1 and qr is qr_k
-        PPM(q(n, k - 2, j, i), q(n, k - 1, j, i), q(n, k, j, i),
-            q(n, k + 1, j, i), q(n, k + 2, j, i), ql(n, i), qr(n, i));
+        PPM(q(n, k - 2, j, i), q(n, k - 1, j, i), q(n, k, j, i), q(n, k + 1, j, i),
+            q(n, k + 2, j, i), ql(n, i), qr(n, i));
       } else {
         PARTHENON_FAIL("Unknow direction for PPM reconstruction.")
       }

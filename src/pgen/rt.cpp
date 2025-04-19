@@ -50,8 +50,7 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
         KOKKOS_LAMBDA(const int k, const int j, const int i) {
           u(IM2, k, j, i) = perturb_strength *
                             (1.0 + std::cos(kx * n_modes * coords.Xc<1>(i))) *
-                            (1.0 + std::cos(ky * n_modes * coords.Xc<2>(j))) /
-                            4.0;
+                            (1.0 + std::cos(ky * n_modes * coords.Xc<2>(j))) / 4.0;
           if (coords.Xc<2>(j) < 0.0) {
             u(IDN, k, j, i) = rho_lower;
           } else {
@@ -63,8 +62,7 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
           // Careful, this does not allow for gravity in any direction
           // except the x2 direction
           u(IEN, k, j, i) =
-              (1.0 / gam + grav_y_ini * u(IDN, k, j, i) * coords.Xc<2>(j)) /
-              gm1;
+              (1.0 / gam + grav_y_ini * u(IDN, k, j, i) * coords.Xc<2>(j)) / gm1;
           u(IEN, k, j, i) += 0.5 * SQR(u(IM2, k, j, i)) / u(IDN, k, j, i);
 
           g(0, k, j, i) = grav_x_ini;

@@ -29,8 +29,7 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
   Real ofrac = pin->GetOrAddReal("problem", "ofrac", 0.65);
   Real ye = pin->GetOrAddReal("problem", "ye", 0.5);
 
-  const auto &eos =
-      pmb->packages.Get("Hydro")->Param<Apophis::EOS_t>("eos_host");
+  const auto &eos = pmb->packages.Get("Hydro")->Param<Apophis::EOS_t>("eos_host");
   Real abar = 16.0;
   Real zbar = abar * ye;
   Real lT = 7.0;
@@ -60,8 +59,7 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
         u(IM2, k, j, i) = 0.0;
         u(IM3, k, j, i) = 0.0;
         u(IEN, k, j, i) =
-            eos.InternalEnergyFromDensityTemperature(rho_u, temp_u, lambda) *
-            rho_u;
+            eos.InternalEnergyFromDensityTemperature(rho_u, temp_u, lambda) * rho_u;
 
         for (int n = NHYDRO; n < NHYDRO + 7; n++) {
           u(n, k, j, i) = 0.0;
@@ -75,18 +73,17 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
         // TODO(alexhls): Make this more flexible for different
         // ignition bubble setups
         u(NHYDRO + 7, k, j, i) = -1.0e-12; // lset1
-        u(NHYDRO + 7, k, j, i) = std::max(
-            u(NHYDRO + 7, k, j, i),
-            radius - std::sqrt(SQR(x - x1) + SQR(y - y1) + SQR(z - z1)));
-        u(NHYDRO + 7, k, j, i) = std::max(
-            u(NHYDRO + 7, k, j, i),
-            radius - std::sqrt(SQR(x - x2) + SQR(y - y2) + SQR(z - z2)));
+        u(NHYDRO + 7, k, j, i) =
+            std::max(u(NHYDRO + 7, k, j, i),
+                     radius - std::sqrt(SQR(x - x1) + SQR(y - y1) + SQR(z - z1)));
+        u(NHYDRO + 7, k, j, i) =
+            std::max(u(NHYDRO + 7, k, j, i),
+                     radius - std::sqrt(SQR(x - x2) + SQR(y - y2) + SQR(z - z2)));
         u(NHYDRO + 7, k, j, i) = u(NHYDRO + 7, k, j, i) * rho_u;
 
         if (rad1 < radius || rad2 < radius) {
           u(IEN, k, j, i) =
-              eos.InternalEnergyFromDensityTemperature(rho_u, temp_b, lambda) *
-              rho_u;
+              eos.InternalEnergyFromDensityTemperature(rho_u, temp_b, lambda) * rho_u;
           u(NHYDRO + 2, k, j, i) = 0.0;
           u(NHYDRO + 3, k, j, i) = 0.0;
           u(NHYDRO + 5, k, j, i) = 1.0 * rho_u;
