@@ -1,4 +1,6 @@
 #include "gravity.hpp"
+#include "gsolvers/none_gravity.hpp"
+#include "gsolvers/constant_gravity.hpp"
 #include "../main.hpp"
 #include "KokkosCore_Config_SetupBackend.hpp"
 #include "interface/state_descriptor.hpp"
@@ -15,16 +17,20 @@ InitializeGravity(ParameterInput *pin) {
   auto pkg = std::make_shared<parthenon::StateDescriptor>("Gravity");
   const auto gravity_str = pin->GetOrAddString("gravity", "type", "none");
   auto gravity = Gravity::undefined;
+  std::shared_ptr<GravitySolver> solver = nullptr;
 
   if (gravity_str == "none") {
     gravity = Gravity::none;
+    solver = std::make_shared<NoneGravitySolver>(pin);
   } else if (gravity_str == "constant") {
     gravity = Gravity::constant;
+    solver = std::make_shared<ConstantGravitySolver>(pin);
   } else {
     PARTHENON_FAIL("[Apophis]: Gravity not recognized. Exiting.");
   }
 
   pkg->AddParam<>("gravity", gravity);
+  pkg->AddParam<>("gravity_solver", solver);
 
   // Add the gravity field
   std::string field_name = "gravity";
@@ -39,30 +45,7 @@ InitializeGravity(ParameterInput *pin) {
 
   pkg->AddField(field_name, m);
 
-  // Add gravity functions
-  std::map<std::tuple<Fluid, Gravity>, GravityFun_t *> gravity_functions{};
-  add_gravity_fun<Fluid::euler, Gravity::none>(gravity_functions);
-  add_gravity_fun<Fluid::euler, Gravity::constant>(gravity_functions);
-
-  GravityFun_t *gravity_fun = nullptr;
-  gravity_fun = gravity_functions.at(std::make_tuple(Fluid::euler, gravity));
-
-  pkg->AddParam<GravityFun_t *>("gravity_fun", gravity_fun);
-
   return pkg;
-}
-
-template <>
-TaskStatus CalculateGravity<Fluid::euler, Gravity::none>(
-    std::shared_ptr<MeshData<Real>> &md) {
-  return TaskStatus::complete;
-}
-
-template <>
-TaskStatus CalculateGravity<Fluid::euler, Gravity::constant>(
-    std::shared_ptr<MeshData<Real>> &md) {
-  // For constant gravity, also no update is needed
-  return TaskStatus::complete;
 }
 
 TaskStatus ApplyGravity(std::shared_ptr<MeshData<Real>> &md, const Real dt) {

@@ -84,8 +84,8 @@ TaskCollection ApophisDriver::MakeTaskCollection(BlockList_t &blocks,
         integrator->gam1[stage - 1],
         integrator->beta[stage - 1] * integrator->dt);
 
-    GravityFun_t *gravity_fun = grav_pkg->Param<GravityFun_t *>("gravity_fun");
-    auto calc_gravity = tl.AddTask(update, gravity_fun, mu0);
+    auto gsolver = grav_pkg->Param<std::shared_ptr<GravitySolver>>("gravity_solver");
+    auto calc_gravity = gsolver->AddTasks(tl, update, pmesh);
     auto gravity = tl.AddTask(calc_gravity, ApplyGravity, mu0,
                               integrator->beta[stage - 1] * integrator->dt);
 
