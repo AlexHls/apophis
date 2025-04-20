@@ -1,4 +1,5 @@
 #include "gravity.hpp"
+#include "../constants.hpp"
 #include "../main.hpp"
 #include "KokkosCore_Config_SetupBackend.hpp"
 #include "gsolvers/constant_gravity.hpp"
@@ -18,6 +19,9 @@ std::shared_ptr<parthenon::StateDescriptor> InitializeGravity(ParameterInput *pi
   const auto gravity_str = pin->GetOrAddString("gravity", "type", "none");
   auto gravity = Gravity::undefined;
   std::shared_ptr<GravitySolver> solver = nullptr;
+
+  const Real gravity_g = pin->GetOrAddReal("gravity", "gravity_constant", GRAVITY_G);
+  pkg->AddParam<>("gravity_constant", gravity_g);
 
   if (gravity_str == "none") {
     gravity = Gravity::none;
@@ -51,10 +55,11 @@ std::shared_ptr<parthenon::StateDescriptor> InitializeGravity(ParameterInput *pi
   // If poisson solver, add the potential field and set solver settings
   if (gravity == Gravity::poisson) {
     field_name = "potential";
-    labels[0] = "phi";
-    auto m = parthenon::Metadata({parthenon::Metadata::Cell, parthenon::Metadata::Derived,
-                                  parthenon::Metadata::FillGhost},
-                                 std::vector<int>({1}), labels);
+    std::vector<std::string> pot_labels(1);
+    pot_labels[0] = "phi";
+    m = parthenon::Metadata({parthenon::Metadata::Cell, parthenon::Metadata::Derived,
+                             parthenon::Metadata::FillGhost},
+                            std::vector<int>({1}), pot_labels);
     pkg->AddField(field_name, m);
 
     std::string solver = pin->GetOrAddString("gravity", "solver", "MGBiCGSTAB");

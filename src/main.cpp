@@ -38,6 +38,9 @@ int main(int argc, char *argv[]) {
     pman.app_input->ProblemGenerator = burn_tube::ProblemGenerator;
   } else if (problem == "rt") {
     pman.app_input->ProblemGenerator = rt::ProblemGenerator;
+    pman.app_input->PostInitialization = rt::ProblemGravityInitialization;
+  } else if (problem == "evrards_collapse") {
+    pman.app_input->ProblemGenerator = ec::ProblemGenerator;
   } else if (problem == "unset") {
     PARTHENON_FAIL("[Apophis]: Problem unset. Exiting.");
   } else {

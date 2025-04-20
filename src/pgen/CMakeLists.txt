@@ -5,4 +5,5 @@ target_sources(apophis PRIVATE
     kh.cpp
     burn_tube.cpp
     rt.cpp
+    evrards_collapse.cpp
 )

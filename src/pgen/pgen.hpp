@@ -40,5 +40,12 @@ namespace rt {
 using namespace parthenon::driver::prelude;
 
 void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin);
+void ProblemGravityInitialization(MeshBlock *pmb, ParameterInput *pin);
 } // namespace rt
+
+namespace ec {
+using namespace parthenon::driver::prelude;
+
+void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin);
+} // namespace ec
 #endif // PGEN_PGEN_HPP_
