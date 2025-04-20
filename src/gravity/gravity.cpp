@@ -45,7 +45,7 @@ std::shared_ptr<parthenon::StateDescriptor> InitializeGravity(ParameterInput *pi
   labels[0] = "gx";
   labels[1] = "gy";
   labels[2] = "gz";
-  auto m = parthenon::Metadata({parthenon::Metadata::Cell, parthenon::Metadata::Derived,
+  auto m = parthenon::Metadata({parthenon::Metadata::Cell, parthenon::Metadata::Restart,
                                 parthenon::Metadata::Intensive,
                                 parthenon::Metadata::FillGhost},
                                std::vector<int>({3}), labels);
@@ -57,7 +57,7 @@ std::shared_ptr<parthenon::StateDescriptor> InitializeGravity(ParameterInput *pi
     field_name = "potential";
     std::vector<std::string> pot_labels(1);
     pot_labels[0] = "phi";
-    m = parthenon::Metadata({parthenon::Metadata::Cell, parthenon::Metadata::Derived,
+    m = parthenon::Metadata({parthenon::Metadata::Cell, parthenon::Metadata::Restart,
                              parthenon::Metadata::FillGhost},
                             std::vector<int>({1}), pot_labels);
     pkg->AddField(field_name, m);

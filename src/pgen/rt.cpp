@@ -61,7 +61,13 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
           u(IM3, k, j, i) = 0.0;
           // Careful, this does not allow for gravity in any direction
           // except the x2 direction
-          u(IEN, k, j, i) = 0.5 * SQR(u(IM2, k, j, i)) / u(IDN, k, j, i);
+          u(IEN, k, j, i) =
+              (1.0 / gam + grav_y_ini * u(IDN, k, j, i) * coords.Xc<2>(j)) / gm1;
+          u(IEN, k, j, i) += 0.5 * SQR(u(IM2, k, j, i)) / u(IDN, k, j, i);
+
+          g(0, k, j, i) = grav_x_ini;
+          g(1, k, j, i) = grav_y_ini;
+          g(2, k, j, i) = 0.0;
         });
   }
 
@@ -70,37 +76,6 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
     PARTHENON_FAIL(
         "ProblemGenerator: iprob >= 2 not implemented yet. Please use iprob=1");
   }
-}
-
-void ProblemGravityInitialization(MeshBlock *pmb, ParameterInput *pin) {
-  auto grav_x_ini = pin->GetReal("gravity", "grav_x_ini");
-  auto grav_y_ini = pin->GetReal("gravity", "grav_y_ini");
-  auto &g = pmb->meshblock_data.Get()->Get("gravity").data;
-
-  auto ib = pmb->cellbounds.GetBoundsI(IndexDomain::interior);
-  auto jb = pmb->cellbounds.GetBoundsJ(IndexDomain::interior);
-  auto kb = pmb->cellbounds.GetBoundsK(IndexDomain::interior);
-
-  // Initialize gravity
-  pmb->par_for(
-      "ProblemGravityInitialization", kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
-      KOKKOS_LAMBDA(const int k, const int j, const int i) {
-        g(0, k, j, i) = grav_x_ini;
-        g(1, k, j, i) = grav_y_ini;
-        g(2, k, j, i) = 0.0;
-      });
-
-  // Apply gravity to the internal energy
-  auto &u = pmb->meshblock_data.Get()->Get("cons").data;
-  auto &coords = pmb->coords;
-  auto gam = pin->GetReal("hydro", "gamma");
-  auto gm1 = (gam - 1.0);
-  pmb->par_for(
-      "ApplyGravity", kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
-      KOKKOS_LAMBDA(const int k, const int j, const int i) {
-        u(IEN, k, j, i) +=
-            (1.0 / gam + grav_y_ini * u(IDN, k, j, i) * coords.Xc<2>(j)) / gm1;
-      });
 }
 
 } // namespace rt
