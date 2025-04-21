@@ -20,6 +20,18 @@ struct GravitySolver {
   ParameterInput *pin_;
 };
 
+#define VARIABLE(ns, varname)                                                            \
+  struct varname : public parthenon::variable_names::base_t<false> {                     \
+    template <class... Ts>                                                               \
+    KOKKOS_INLINE_FUNCTION varname(Ts &&...args)                                         \
+        : parthenon::variable_names::base_t<false>(std::forward<Ts>(args)...) {}         \
+    static std::string name() { return #ns "." #varname; }                               \
+  }
+
+VARIABLE(gravity, phi);
+VARIABLE(gravity, laplace);
+VARIABLE(gravity, rhs);
+
 std::shared_ptr<parthenon::StateDescriptor> InitializeGravity(ParameterInput *pin);
 
 TaskStatus ApplyGravity(std::shared_ptr<MeshData<Real>> &md, const Real dt);
