@@ -66,6 +66,9 @@ u_therm = 0.05
 <gravity>
 type = poisson
 gravity_constant = 1.0
+solver = BiCGSTAB
+flux_correct = true
+diagonal_alpha = 0.0
 
 <gravity/solver_params>
 precondition = true

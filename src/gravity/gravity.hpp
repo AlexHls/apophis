@@ -29,8 +29,8 @@ struct GravitySolver {
   }
 
 VARIABLE(gravity, phi);
-VARIABLE(gravity, laplace);
 VARIABLE(gravity, rhs);
+VARIABLE(gravity, D);
 
 std::shared_ptr<parthenon::StateDescriptor> InitializeGravity(ParameterInput *pin);
 

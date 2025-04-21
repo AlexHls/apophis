@@ -9,12 +9,33 @@
 
 #include "parthenon/package.hpp"
 #include "parthenon/parthenon.hpp"
+#include <bvals/boundary_conditions_generic.hpp>
 #include <solvers/bicgstab_solver.hpp>
 #include <solvers/solver_utils.hpp>
 
 using namespace parthenon::driver::prelude;
+using namespace parthenon::BoundaryFunction;
+using parthenon::X1DIR;
+using parthenon::X2DIR;
+using parthenon::X3DIR;
 
 namespace Apophis {
+
+struct any_gravity : public parthenon::variable_names::base_t<true> {
+  template <class... Ts>
+  KOKKOS_INLINE_FUNCTION any_gravity(Ts &&...args)
+      : base_t<true>(std::forward<Ts>(args)...) {}
+  static std::string name() { return "gravity[.].*"; }
+};
+
+template <parthenon::CoordinateDirection DIR, BCSide SIDE>
+auto GetBC() {
+  return [](std::shared_ptr<MeshBlockData<Real>> &rc, bool coarse) -> void {
+    using namespace parthenon;
+    using namespace parthenon::BoundaryFunction;
+    GenericBC<DIR, SIDE, BCType::FixedFace, any_gravity>(rc, coarse, 0.0);
+  };
+}
 
 std::shared_ptr<parthenon::StateDescriptor> InitializeGravity(ParameterInput *pin) {
   auto pkg = std::make_shared<parthenon::StateDescriptor>("Gravity");
@@ -54,40 +75,64 @@ std::shared_ptr<parthenon::StateDescriptor> InitializeGravity(ParameterInput *pi
 
   // If poisson solver, add the potential field and set solver settings
   if (gravity == Gravity::poisson) {
-    m = parthenon::Metadata({parthenon::Metadata::Cell, parthenon::Metadata::Independent,
-                             parthenon::Metadata::FillGhost,
-                             parthenon::Metadata::GMGRestrict});
-    pkg->AddField(phi::name(), m);
+    // Special boundary conditions for the potential field
+    using BF = parthenon::BoundaryFace;
+    pkg->UserBoundaryFunctions[BF::inner_x1].push_back(GetBC<X1DIR, BCSide::Inner>());
+    pkg->UserBoundaryFunctions[BF::inner_x2].push_back(GetBC<X2DIR, BCSide::Inner>());
+    pkg->UserBoundaryFunctions[BF::inner_x3].push_back(GetBC<X3DIR, BCSide::Inner>());
+    pkg->UserBoundaryFunctions[BF::outer_x1].push_back(GetBC<X1DIR, BCSide::Outer>());
+    pkg->UserBoundaryFunctions[BF::outer_x2].push_back(GetBC<X2DIR, BCSide::Outer>());
+    pkg->UserBoundaryFunctions[BF::outer_x3].push_back(GetBC<X3DIR, BCSide::Outer>());
 
-    m = parthenon::Metadata({parthenon::Metadata::Cell, parthenon::Metadata::Independent,
-                             parthenon::Metadata::OneCopy});
-    pkg->AddField(laplace::name(), m);
+    // Poisson specific settings
+    int max_poisson_iterations = pin->GetOrAddInteger("gravity", "max_iterations", 10000);
+    pkg->AddParam<>("max_iterations", max_poisson_iterations);
+
+    Real diagonal_alpha = pin->GetOrAddReal("gravity", "diagonal_alpha", 0.0);
+    pkg->AddParam<>("diagonal_alpha", diagonal_alpha);
+
+    std::string solver = pin->GetOrAddString("gravity", "solver", "MG");
+    pkg->AddParam<>("solver", solver);
+
+    bool flux_correct = pin->GetOrAddBoolean("gravity", "flux_correct", false);
+    pkg->AddParam<>("flux_correct", flux_correct);
+
+    Real err_tol = pin->GetOrAddReal("gravity", "err_tol", 1.0e-8);
+    pkg->AddParam<>("err_tol", err_tol);
+
+    PoissonEquation eq;
+    eq.do_flux_cor = flux_correct;
+
+    parthenon::solvers::MGParams mg_params(pin, "gravity/solver_params");
+    parthenon::solvers::MGSolver<phi, rhs, PoissonEquation> mg_solver(pkg.get(),
+                                                                      mg_params, eq);
+    pkg->AddParam<>("MGsolver", mg_solver, parthenon::Params::Mutability::Mutable);
+
+    parthenon::solvers::BiCGSTABParams bicgstab_params(pin, "gravity/solver_params");
+    parthenon::solvers::BiCGSTABSolver<phi, rhs, PoissonEquation> bicg_solver(
+        pkg.get(), bicgstab_params, eq);
+    pkg->AddParam<>("MGBiCGSTABsolver", bicg_solver,
+                    parthenon::Params::Mutability::Mutable);
+
+    // Add fields needed for the Poisson solver
+    using namespace parthenon::refinement_ops;
+    auto mD = parthenon::Metadata(
+        {parthenon::Metadata::Independent, parthenon::Metadata::OneCopy,
+         parthenon::Metadata::Face, parthenon::Metadata::GMGRestrict});
+    mD.RegisterRefinementOps<ProlongateSharedLinear, RestrictAverage>();
+    pkg->AddField(D::name(), mD);
+
+    auto mflux_comm = parthenon::Metadata(
+        {parthenon::Metadata::Cell, parthenon::Metadata::Independent,
+         parthenon::Metadata::FillGhost, parthenon::Metadata::WithFluxes,
+         parthenon::Metadata::GMGRestrict});
+    mflux_comm.RegisterRefinementOps<ProlongateSharedLinear, RestrictAverage>();
+    pkg->AddField(phi::name(), mflux_comm);
 
     auto m_no_ghost =
         parthenon::Metadata({parthenon::Metadata::Cell, parthenon::Metadata::Derived,
                              parthenon::Metadata::OneCopy});
     pkg->AddField(rhs::name(), m_no_ghost);
-
-    int max_poisson_iterations = pin->GetOrAddInteger("gravity", "max_iterations", 10000);
-    pkg->AddParam<>("max_iterations", max_poisson_iterations);
-
-    std::string solver = pin->GetOrAddString("gravity", "solver", "MGBiCGSTAB");
-    pkg->AddParam<>("solver", solver);
-
-    Real err_tol = pin->GetOrAddReal("gravity", "err_tol", 1.0e-8);
-    pkg->AddParam<>("err_tol", err_tol);
-
-    PoissonOp eq;
-
-    if (solver == "MGBiCGSTAB") {
-      parthenon::solvers::BiCGSTABParams bicgstab_params(pin, "gravity/solver_params");
-      parthenon::solvers::BiCGSTABSolver<phi, rhs, PoissonOp> bicg_solver(
-          pkg.get(), bicgstab_params, eq);
-      pkg->AddParam<>("MGBiCGSTABsolver", bicg_solver,
-                      parthenon::Params::Mutability::Mutable);
-    } else {
-      PARTHENON_FAIL("[Apophis]: Gravity solver not recognized. Exiting.");
-    }
   }
 
   return pkg;

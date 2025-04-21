@@ -3,69 +3,92 @@
 
 #include "../gravity.hpp"
 #include "solvers/bicgstab_solver.hpp"
+#include "solvers/mg_solver.hpp"
+#include "solvers/solver_utils.hpp"
 
 #include "../../main.hpp"
+
+using namespace parthenon::driver::prelude;
 
 namespace Apophis {
 
 // 7-point stencil for the Laplacian operator using second central differences
-struct PoissonOp {
+struct PoissonEquation {
+  bool do_flux_cor = false;
+
   template <class x_t, class out_t, class TL_t>
   TaskID Ax(TL_t &tl, TaskID dep, std::shared_ptr<MeshData<Real>> &md) {
-
-    return tl.AddTask(
-        dep, "PoissonOp::Ax",
-        [](std::shared_ptr<parthenon::MeshData<Real>> &md) {
-          using TE = parthenon::TopologicalElement;
-          TE te = TE::CC;
-          auto pkg = md->GetMeshPointer()->packages.Get("Gravity");
-          const int ndim = md->GetMeshPointer()->ndim;
-
-          int nblocks = md->NumBlocks();
-          std::vector<bool> include_block(nblocks, true);
-          auto desc = parthenon::MakePackDescriptor<x_t, out_t>(md.get(), {}, {});
-          auto pack = desc.GetPack(md.get(), include_block);
-
-          IndexRange ib = md->GetBoundsI(IndexDomain::interior, te);
-          IndexRange jb = md->GetBoundsJ(IndexDomain::interior, te);
-          IndexRange kb = md->GetBoundsK(IndexDomain::interior, te);
-
-          parthenon::par_for(
-              "Laplace7pt", 0, pack.GetNBlocks() - 1, kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
-              KOKKOS_LAMBDA(int b, int k, int j, int i) {
-                const auto &coords = pack.GetCoordinates(b);
-                Real idx2 = 1 / (coords.Dxc<1>(i) * coords.Dxc<1>(i));
-                pack(b, te, out_t(), k, j, i) =
-                    (pack(b, te, x_t(), k, j, i - 1) + pack(b, te, x_t(), k, j, i + 1) -
-                     2 * pack(b, te, x_t(), k, j, i)) *
-                    idx2;
-                if (ndim > 1) {
-                  Real idy2 = 1 / (coords.Dxc<2>(j) * coords.Dxc<2>(j));
-                  pack(b, te, out_t(), k, j, i) +=
-                      (pack(b, te, x_t(), k, j - 1, i) + pack(b, te, x_t(), k, j + 1, i) -
-                       2 * pack(b, te, x_t(), k, j, i)) *
-                      idy2;
-                }
-                if (ndim > 2) {
-                  Real idz2 = 1 / (coords.Dxc<3>(k) * coords.Dxc<3>(k));
-                  pack(b, te, out_t(), k, j, i) +=
-                      (pack(b, te, x_t(), k - 1, j, i) + pack(b, te, x_t(), k + 1, j, i) -
-                       2 * pack(b, te, x_t(), k, j, i)) *
-                      idz2;
-                }
-              });
-          return TaskStatus::complete;
-        },
-        md);
+    auto flux_res = tl.AddTask(dep, CalculateFluxes<x_t>, md);
+    if (do_flux_cor && !(md->grid.type == parthenon::GridType::two_level_composite)) {
+      auto start_flxcor =
+          tl.AddTask(flux_res, parthenon::StartReceiveFluxCorrections, md);
+      auto send_flxcor = tl.AddTask(flux_res, parthenon::LoadAndSendFluxCorrections, md);
+      auto recv_flxcor = tl.AddTask(start_flxcor, parthenon::ReceiveFluxCorrections, md);
+      flux_res = tl.AddTask(recv_flxcor, parthenon::SetFluxCorrections, md);
+    }
+    return tl.AddTask(flux_res, FluxMultiplyMatrix<x_t, out_t>, md);
   }
 
-  //-----------------------------------------------------------------------------
-  // Build the diagonal of the 7‑point Laplace operator:
-  //   diag(i,j,k) = −2*(1/Δx² + 1/Δy² + 1/Δz²)
-  //-----------------------------------------------------------------------------
-  template <class diag_t>
-  static parthenon::TaskStatus
-  SetDiagonal(std::shared_ptr<parthenon::MeshData<Real>> &md) {
+  template <class var_t>
+  static TaskStatus CalculateFluxes(std::shared_ptr<MeshData<Real>> &md) {
+    using namespace parthenon;
+    const int ndim = md->GetMeshPointer()->ndim;
+    using TE = parthenon::TopologicalElement;
+    TE te = TE::CC;
+    IndexRange ib = md->GetBoundsI(IndexDomain::interior, te);
+    IndexRange jb = md->GetBoundsJ(IndexDomain::interior, te);
+    IndexRange kb = md->GetBoundsK(IndexDomain::interior, te);
+
+    using TE = parthenon::TopologicalElement;
+
+    int nblocks = md->NumBlocks();
+    std::vector<bool> include_block(nblocks, true);
+
+    auto desc =
+        parthenon::MakePackDescriptor<var_t, D>(md.get(), {}, {PDOpt::WithFluxes});
+    auto pack = desc.GetPack(md.get(), include_block);
+    parthenon::par_for(
+        "CalculateFluxes", 0, pack.GetNBlocks() - 1, kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
+        KOKKOS_LAMBDA(const int b, const int k, const int j, const int i) {
+          const auto &coords = pack.GetCoordinates(b);
+          Real dx1 = coords.template Dxc<X1DIR>(k, j, i);
+          pack.flux(b, X1DIR, var_t(), k, j, i) =
+              pack(b, TE::F1, D(), k, j, i) / dx1 *
+              (pack(b, te, var_t(), k, j, i - 1) - pack(b, te, var_t(), k, j, i));
+          if (i == ib.e)
+            pack.flux(b, X1DIR, var_t(), k, j, i + 1) =
+                pack(b, TE::F1, D(), k, j, i + 1) / dx1 *
+                (pack(b, te, var_t(), k, j, i) - pack(b, te, var_t(), k, j, i + 1));
+
+          if (ndim > 1) {
+            Real dx2 = coords.template Dxc<X2DIR>(k, j, i);
+            pack.flux(b, X2DIR, var_t(), k, j, i) =
+                pack(b, TE::F2, D(), k, j, i) *
+                (pack(b, te, var_t(), k, j - 1, i) - pack(b, te, var_t(), k, j, i)) / dx2;
+            if (j == jb.e)
+              pack.flux(b, X2DIR, var_t(), k, j + 1, i) =
+                  pack(b, TE::F2, D(), k, j + 1, i) *
+                  (pack(b, te, var_t(), k, j, i) - pack(b, te, var_t(), k, j + 1, i)) /
+                  dx2;
+          }
+
+          if (ndim > 2) {
+            Real dx3 = coords.template Dxc<X3DIR>(k, j, i);
+            pack.flux(b, X3DIR, var_t(), k, j, i) =
+                pack(b, TE::F3, D(), k, j, i) *
+                (pack(b, te, var_t(), k - 1, j, i) - pack(b, te, var_t(), k, j, i)) / dx3;
+            if (k == kb.e)
+              pack.flux(b, X2DIR, var_t(), k + 1, j, i) =
+                  pack(b, TE::F3, D(), k + 1, j, i) *
+                  (pack(b, te, var_t(), k, j, i) - pack(b, te, var_t(), k + 1, j, i)) /
+                  dx3;
+          }
+        });
+    return TaskStatus::complete;
+  }
+
+  template <class in_t, class out_t>
+  static TaskStatus FluxMultiplyMatrix(std::shared_ptr<MeshData<Real>> &md) {
     using namespace parthenon;
     const int ndim = md->GetMeshPointer()->ndim;
     using TE = parthenon::TopologicalElement;
@@ -75,32 +98,85 @@ struct PoissonOp {
     IndexRange kb = md->GetBoundsK(IndexDomain::interior, te);
 
     auto pkg = md->GetMeshPointer()->packages.Get("Gravity");
+    const auto alpha = pkg->Param<Real>("diagonal_alpha");
+
+    int nblocks = md->NumBlocks();
+    std::vector<bool> include_block(nblocks, true);
+
+    auto desc =
+        parthenon::MakePackDescriptor<in_t, out_t>(md.get(), {}, {PDOpt::WithFluxes});
+    auto pack = desc.GetPack(md.get(), include_block);
+    parthenon::par_for(
+        "FluxMultiplyMatrix", 0, pack.GetNBlocks() - 1, kb.s, kb.e, jb.s, jb.e, ib.s,
+        ib.e, KOKKOS_LAMBDA(const int b, const int k, const int j, const int i) {
+          auto &coords = pack.GetCoordinates(b);
+          Real dx1 = coords.template Dxc<X1DIR>(k, j, i);
+          pack(b, te, out_t(), k, j, i) = -alpha * pack(b, te, in_t(), k, j, i);
+          pack(b, te, out_t(), k, j, i) += (pack.flux(b, X1DIR, in_t(), k, j, i) -
+                                            pack.flux(b, X1DIR, in_t(), k, j, i + 1)) /
+                                           dx1;
+
+          if (ndim > 1) {
+            Real dx2 = coords.template Dxc<X2DIR>(k, j, i);
+            pack(b, te, out_t(), k, j, i) += (pack.flux(b, X2DIR, in_t(), k, j, i) -
+                                              pack.flux(b, X2DIR, in_t(), k, j + 1, i)) /
+                                             dx2;
+          }
+
+          if (ndim > 2) {
+            Real dx3 = coords.template Dxc<X3DIR>(k, j, i);
+            pack(b, te, out_t(), k, j, i) += (pack.flux(b, X3DIR, in_t(), k, j, i) -
+                                              pack.flux(b, X3DIR, in_t(), k + 1, j, i)) /
+                                             dx3;
+          }
+        });
+    return TaskStatus::complete;
+  }
+
+  template <class diag_t>
+  TaskStatus SetDiagonal(std::shared_ptr<MeshData<Real>> &md) {
+    using namespace parthenon;
+    const int ndim = md->GetMeshPointer()->ndim;
+    using TE = parthenon::TopologicalElement;
+    TE te = TE::CC;
+    IndexRange ib = md->GetBoundsI(IndexDomain::interior, te);
+    IndexRange jb = md->GetBoundsJ(IndexDomain::interior, te);
+    IndexRange kb = md->GetBoundsK(IndexDomain::interior, te);
+
+    auto pkg = md->GetMeshPointer()->packages.Get("Gravity");
+    const auto alpha = pkg->Param<Real>("diagonal_alpha");
 
     int nblocks = md->NumBlocks();
     std::vector<bool> include_block(nblocks, true);
 
     auto desc = parthenon::MakePackDescriptor<diag_t, D>(md.get());
     auto pack = desc.GetPack(md.get(), include_block);
+    parthenon::par_for(
+        "StoreDiagonal", 0, pack.GetNBlocks() - 1, kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
+        KOKKOS_LAMBDA(const int b, const int k, const int j, const int i) {
+          const auto &coords = pack.GetCoordinates(b);
 
-    auto diag = md->PackVariables({diag_t::name()}).Get(0)->data;
-    auto pmb = md->GetBlockData(0)->GetBlockPointer();
+          Real dx1 = coords.template Dxc<X1DIR>(k, j, i);
+          Real diag_elem =
+              -(pack(b, TE::F1, D(), k, j, i) + pack(b, TE::F1, D(), k, j, i + 1)) /
+                  (dx1 * dx1) -
+              alpha;
 
-    // interior cell ranges
-    auto ib = pmb->cellbounds.GetBoundsI(IndexDomain::interior);
-    auto jb = pmb->cellbounds.GetBoundsJ(IndexDomain::interior);
-    auto kb = pmb->cellbounds.GetBoundsK(IndexDomain::interior);
+          if (ndim > 1) {
+            Real dx2 = coords.template Dxc<X2DIR>(k, j, i);
+            diag_elem -=
+                (pack(b, TE::F2, D(), k, j, i) + pack(b, TE::F2, D(), k, j + 1, i)) /
+                (dx2 * dx2);
+          }
 
-    // constant spacings (uniform grid assumed)
-    Real idx2 = 1.0 / (pmb->coords.Dx<0>(0) * pmb->coords.Dx<0>(0));
-    Real idy2 = 1.0 / (pmb->coords.Dx<1>(0) * pmb->coords.Dx<1>(0));
-    Real idz2 = 1.0 / (pmb->coords.Dx<2>(0) * pmb->coords.Dx<2>(0));
-
-    pmb->par_for(
-        "PoissonOp::SetDiagonal", 0, diag.GetDim(5) - 1, kb.s, kb.e, jb.s, jb.e, ib.s,
-        ib.e, KOKKOS_LAMBDA(int b, int k, int j, int i) {
-          diag(0, k, j, i) = -2.0 * (idx2 + idy2 + idz2);
+          if (ndim > 2) {
+            Real dx3 = coords.template Dxc<X3DIR>(k, j, i);
+            diag_elem -=
+                (pack(b, TE::F3, D(), k, j, i) + pack(b, TE::F3, D(), k + 1, j, i)) /
+                (dx3 * dx3);
+          }
+          pack(b, te, diag_t(), k, j, i) = diag_elem;
         });
-
     return TaskStatus::complete;
   }
 };
@@ -121,11 +197,27 @@ TaskID PoissonGravitySolver::AddTasks(TaskList &tl, TaskID dep, Mesh *pmesh,
   auto build_rhs = tl.AddTask(dep, &PoissonGravitySolver::ComputeRhs, this, md0);
 
   auto pkg = pmesh->packages.Get<parthenon::StateDescriptor>("Gravity");
-  auto *bicg = pkg->MutableParam<parthenon::solvers::BiCGSTABSolver<phi, rhs, PoissonOp>>(
-      "MGBiCGSTABsolver");
+  auto solver = pkg->Param<std::string>("solver");
+  auto *mg_solver =
+      pkg->MutableParam<parthenon::solvers::MGSolver<phi, rhs, PoissonEquation>>(
+          "MGsolver");
+  auto *bicgstab_solver =
+      pkg->MutableParam<parthenon::solvers::BiCGSTABSolver<phi, rhs, PoissonEquation>>(
+          "MGBiCGSTABsolver");
 
-  auto setup = bicg->AddSetupTasks(tl, build_rhs, partition, pmesh);
-  auto solve = bicg->AddTasks(tl, setup, pmesh, partition);
+  auto zero_phi =
+      tl.AddTask(build_rhs, TF(parthenon::solvers::utils::SetToZero<phi>), md0);
+
+  auto solve = zero_phi;
+  if (solver == "BiCGSTAB") {
+    auto setup = bicgstab_solver->AddSetupTasks(tl, zero_phi, partition, pmesh);
+    solve = bicgstab_solver->AddTasks(tl, setup, pmesh, partition);
+  } else if (solver == "MG") {
+    auto setup = mg_solver->AddSetupTasks(tl, zero_phi, partition, pmesh);
+    solve = mg_solver->AddTasks(tl, setup, pmesh, partition);
+  } else {
+    PARTHENON_FAIL("Unknown gravity solver type.");
+  }
 
   auto comp_grav =
       tl.AddTask(solve, &PoissonGravitySolver::ComputeGravityVector, this, md0);
