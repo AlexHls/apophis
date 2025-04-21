@@ -33,10 +33,9 @@ TaskStatus PoissonGravitySolver::ComputePhi(std::shared_ptr<MeshData<Real>> &md)
   const auto cons_pack = md->PackVariables(std::vector<std::string>{"cons"});
   const auto prim_pack = md->PackVariables(std::vector<std::string>{"prim"});
   auto phi_pack = md->PackVariables(std::vector<std::string>{"potential"});
-  const auto &cellbounds = pmb->cellbounds;
-  auto ib = cellbounds.GetBoundsI(IndexDomain::interior);
-  auto jb = cellbounds.GetBoundsJ(IndexDomain::interior);
-  auto kb = cellbounds.GetBoundsK(IndexDomain::interior);
+  IndexRange ib = pmb->cellbounds.GetBoundsI(IndexDomain::entire);
+  IndexRange jb = pmb->cellbounds.GetBoundsJ(IndexDomain::entire);
+  IndexRange kb = pmb->cellbounds.GetBoundsK(IndexDomain::entire);
 
   pmb->par_for(
       "UpdatePhi", 0, cons_pack.GetDim(5) - 1, kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
@@ -46,7 +45,7 @@ TaskStatus PoissonGravitySolver::ComputePhi(std::shared_ptr<MeshData<Real>> &md)
 
         Real r_sqr = SQR(coords.Xc<1>(i)) + SQR(coords.Xc<2>(j)) + SQR(coords.Xc<3>(k));
 
-        phi(0, k, j, i) = -1 / (r_sqr + 1.0e-1);
+        phi(0, k, j, i) = -0.1 / (r_sqr + 1.0e-1);
       });
   return TaskStatus::complete;
 }

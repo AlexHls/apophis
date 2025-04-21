@@ -5,7 +5,7 @@ problem = Evrards collapse test
 problem_id = evrards_collapse
 
 <parthenon/mesh>
-refinement = adaptive
+refinement = none
 numlevel = 3
 nghost = 2
 
@@ -36,7 +36,7 @@ nx3=1
 integrator = vl2
 cfl = 0.4
 tlim = 0.8
-nlim = 100000
+nlim = 10000
 perf_cycle_offset = 2 # number of inital cycles not to be included in perf calc
 ncycle_out_mesh = -100
 
@@ -69,4 +69,4 @@ gravity_constant = 1.0
 <parthenon/output0>
 file_type = hdf5
 dt = 0.1
-variables = cons,prim,gravity
+variables = cons,prim,gravity,potential
