@@ -523,8 +523,11 @@ TaskStatus CalculateFluxes(std::shared_ptr<MeshData<Real>> &md) {
       jl = jb.s - 1, ju = jb.e + 1, kl = kb.s - 1, ku = kb.e + 1;
   }
 
-  std::vector<parthenon::MetadataFlag> flags_ind({parthenon::Metadata::Independent});
-  auto cons_pack = md->PackVariablesAndFluxes(flags_ind);
+  // TODO(alexhls): Make sure that we're getting the correct variables in the
+  // flux calculation.
+  // std::vector<parthenon::MetadataFlag> flags_ind({parthenon::Metadata::Independent});
+  // auto cons_pack = md->PackVariablesAndFluxes(flags_ind);
+  auto cons_pack = md->PackVariablesAndFluxes(std::vector<std::string>{"cons"});
   auto pkg = pmb->packages.Get("Hydro");
   const int nhydro = pkg->Param<int>("nhydro");
   const int nscalars = pkg->Param<int>("nscalars");
