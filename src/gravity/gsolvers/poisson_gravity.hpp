@@ -44,8 +44,7 @@ struct PoissonEquation {
     int nblocks = md->NumBlocks();
     std::vector<bool> include_block(nblocks, true);
 
-    auto desc =
-        parthenon::MakePackDescriptor<var_t, D>(md.get(), {}, {PDOpt::WithFluxes});
+    auto desc = parthenon::MakePackDescriptor<var_t>(md.get(), {}, {PDOpt::WithFluxes});
     auto pack = desc.GetPack(md.get(), include_block);
     parthenon::par_for(
         "CalculateFluxes", 0, pack.GetNBlocks() - 1, kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
@@ -53,21 +52,17 @@ struct PoissonEquation {
           const auto &coords = pack.GetCoordinates(b);
           Real dx1 = coords.template Dxc<X1DIR>(k, j, i);
           pack.flux(b, X1DIR, var_t(), k, j, i) =
-              pack(b, TE::F1, D(), k, j, i) / dx1 *
-              (pack(b, te, var_t(), k, j, i - 1) - pack(b, te, var_t(), k, j, i));
+              (pack(b, te, var_t(), k, j, i - 1) - pack(b, te, var_t(), k, j, i)) / dx1;
           if (i == ib.e)
             pack.flux(b, X1DIR, var_t(), k, j, i + 1) =
-                pack(b, TE::F1, D(), k, j, i + 1) / dx1 *
-                (pack(b, te, var_t(), k, j, i) - pack(b, te, var_t(), k, j, i + 1));
+                (pack(b, te, var_t(), k, j, i) - pack(b, te, var_t(), k, j, i + 1)) / dx1;
 
           if (ndim > 1) {
             Real dx2 = coords.template Dxc<X2DIR>(k, j, i);
             pack.flux(b, X2DIR, var_t(), k, j, i) =
-                pack(b, TE::F2, D(), k, j, i) *
                 (pack(b, te, var_t(), k, j - 1, i) - pack(b, te, var_t(), k, j, i)) / dx2;
             if (j == jb.e)
               pack.flux(b, X2DIR, var_t(), k, j + 1, i) =
-                  pack(b, TE::F2, D(), k, j + 1, i) *
                   (pack(b, te, var_t(), k, j, i) - pack(b, te, var_t(), k, j + 1, i)) /
                   dx2;
           }
@@ -75,11 +70,9 @@ struct PoissonEquation {
           if (ndim > 2) {
             Real dx3 = coords.template Dxc<X3DIR>(k, j, i);
             pack.flux(b, X3DIR, var_t(), k, j, i) =
-                pack(b, TE::F3, D(), k, j, i) *
                 (pack(b, te, var_t(), k - 1, j, i) - pack(b, te, var_t(), k, j, i)) / dx3;
             if (k == kb.e)
               pack.flux(b, X2DIR, var_t(), k + 1, j, i) =
-                  pack(b, TE::F3, D(), k + 1, j, i) *
                   (pack(b, te, var_t(), k, j, i) - pack(b, te, var_t(), k + 1, j, i)) /
                   dx3;
           }
@@ -135,6 +128,12 @@ struct PoissonEquation {
 
   template <class diag_t>
   TaskStatus SetDiagonal(std::shared_ptr<MeshData<Real>> &md) {
+    /*
+     * Set the diagonal of the matrix to be -2/dx^2 - alpha
+     * where dx is the grid spacing in each direction and alpha is a user-defined
+     * parameter. ATTENTION: When comparing to the Parthenon example for the Poisson
+     * solver, we fix D = 1.0, i.e. this isn't as flexible.
+     */
     using namespace parthenon;
     const int ndim = md->GetMeshPointer()->ndim;
     using TE = parthenon::TopologicalElement;
@@ -149,7 +148,7 @@ struct PoissonEquation {
     int nblocks = md->NumBlocks();
     std::vector<bool> include_block(nblocks, true);
 
-    auto desc = parthenon::MakePackDescriptor<diag_t, D>(md.get());
+    auto desc = parthenon::MakePackDescriptor<diag_t>(md.get());
     auto pack = desc.GetPack(md.get(), include_block);
     parthenon::par_for(
         "StoreDiagonal", 0, pack.GetNBlocks() - 1, kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
@@ -157,23 +156,16 @@ struct PoissonEquation {
           const auto &coords = pack.GetCoordinates(b);
 
           Real dx1 = coords.template Dxc<X1DIR>(k, j, i);
-          Real diag_elem =
-              -(pack(b, TE::F1, D(), k, j, i) + pack(b, TE::F1, D(), k, j, i + 1)) /
-                  (dx1 * dx1) -
-              alpha;
+          Real diag_elem = -2.0 / (dx1 * dx1) - alpha;
 
           if (ndim > 1) {
             Real dx2 = coords.template Dxc<X2DIR>(k, j, i);
-            diag_elem -=
-                (pack(b, TE::F2, D(), k, j, i) + pack(b, TE::F2, D(), k, j + 1, i)) /
-                (dx2 * dx2);
+            diag_elem -= 2.0 / (dx2 * dx2);
           }
 
           if (ndim > 2) {
             Real dx3 = coords.template Dxc<X3DIR>(k, j, i);
-            diag_elem -=
-                (pack(b, TE::F3, D(), k, j, i) + pack(b, TE::F3, D(), k + 1, j, i)) /
-                (dx3 * dx3);
+            diag_elem -= 2.0 / (dx3 * dx3);
           }
           pack(b, te, diag_t(), k, j, i) = diag_elem;
         });
@@ -226,23 +218,33 @@ TaskID PoissonGravitySolver::AddTasks(TaskList &tl, TaskID dep, Mesh *pmesh,
 }
 
 TaskStatus PoissonGravitySolver::ComputeRhs(std::shared_ptr<MeshData<Real>> &md) {
-  auto pmb = md->GetBlockData(0)->GetBlockPointer();
-  const auto cons_pack = md->PackVariables(std::vector<std::string>{"cons"});
-  auto rhs_pack = md->PackVariables(std::vector<std::string>{"rhs"});
-  IndexRange ib = pmb->cellbounds.GetBoundsI(IndexDomain::entire);
-  IndexRange jb = pmb->cellbounds.GetBoundsJ(IndexDomain::entire);
-  IndexRange kb = pmb->cellbounds.GetBoundsK(IndexDomain::entire);
+  using namespace parthenon;
+  using TE = parthenon::TopologicalElement;
+  TE te = TE::CC;
+  IndexRange ib = md->GetBoundsI(IndexDomain::entire, te);
+  IndexRange jb = md->GetBoundsJ(IndexDomain::entire, te);
+  IndexRange kb = md->GetBoundsK(IndexDomain::entire, te);
 
-  const Real gravity_g = pmb->packages.Get("Gravity")->Param<Real>("gravity_constant");
+  auto pkg = md->GetMeshPointer()->packages.Get("Gravity");
+
+  int nblocks = md->NumBlocks();
+  std::vector<bool> include_block(nblocks, true);
+
+  auto desc = parthenon::MakePackDescriptor<rhs>(md.get());
+  auto pack = desc.GetPack(md.get(), include_block);
+
+  // TODO(alexhls): Include this in the pack descriptor
+  const auto cons_pack = md->PackVariables(std::vector<std::string>{"cons"});
+
+  const Real gravity_g = pkg->Param<Real>("gravity_constant");
   const Real four_pi_g = 4.0 * M_PI * gravity_g;
 
-  pmb->par_for(
+  parthenon::par_for(
       "BuildRhs", 0, cons_pack.GetDim(5) - 1, kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
       KOKKOS_LAMBDA(const int b, const int k, const int j, const int i) {
         const auto &cons = cons_pack(b);
-        auto &rhs = rhs_pack(b);
 
-        rhs(0, k, j, i) = four_pi_g * cons(IDN, k, j, i);
+        pack(b, te, rhs(), k, j, i) = four_pi_g * cons(IDN, k, j, i);
       });
   return TaskStatus::complete;
 }
@@ -253,7 +255,7 @@ PoissonGravitySolver::ComputeGravityVector(std::shared_ptr<MeshData<Real>> &md) 
   auto cons_pack = md->PackVariables(std::vector<std::string>{"cons"});
   const auto prim_pack = md->PackVariables(std::vector<std::string>{"prim"});
   auto grav_pack = md->PackVariables(std::vector<std::string>{"gravity"});
-  const auto phi_pack = md->PackVariables(std::vector<std::string>{"potential"});
+  const auto phi_pack = md->PackVariables(std::vector<std::string>{"gravity.phi"});
 
   const auto &cellbounds = pmb->cellbounds;
   auto ib = cellbounds.GetBoundsI(IndexDomain::interior);

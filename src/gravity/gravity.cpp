@@ -116,12 +116,6 @@ std::shared_ptr<parthenon::StateDescriptor> InitializeGravity(ParameterInput *pi
 
     // Add fields needed for the Poisson solver
     using namespace parthenon::refinement_ops;
-    auto mD = parthenon::Metadata(
-        {parthenon::Metadata::Independent, parthenon::Metadata::OneCopy,
-         parthenon::Metadata::Face, parthenon::Metadata::GMGRestrict});
-    mD.RegisterRefinementOps<ProlongateSharedLinear, RestrictAverage>();
-    pkg->AddField(D::name(), mD);
-
     auto mflux_comm = parthenon::Metadata(
         {parthenon::Metadata::Cell, parthenon::Metadata::Independent,
          parthenon::Metadata::FillGhost, parthenon::Metadata::WithFluxes,

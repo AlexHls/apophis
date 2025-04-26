@@ -5,6 +5,8 @@
 #include <parthenon/driver.hpp>
 #include <parthenon/package.hpp>
 
+#include "../constants.hpp"
+#include "../gravity/gravity.hpp"
 #include "../main.hpp"
 
 namespace ec {
@@ -17,12 +19,17 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
   auto gam = pin->GetReal("hydro", "gamma");
   auto gm1 = (gam - 1.0);
 
-  IndexRange ib = pmb->cellbounds.GetBoundsI(IndexDomain::interior);
-  IndexRange jb = pmb->cellbounds.GetBoundsJ(IndexDomain::interior);
-  IndexRange kb = pmb->cellbounds.GetBoundsK(IndexDomain::interior);
+  IndexRange ib = pmb->cellbounds.GetBoundsI(IndexDomain::entire);
+  IndexRange jb = pmb->cellbounds.GetBoundsJ(IndexDomain::entire);
+  IndexRange kb = pmb->cellbounds.GetBoundsK(IndexDomain::entire);
 
   auto &u = pmb->meshblock_data.Get()->Get("cons").data;
   auto &coords = pmb->coords;
+
+  auto &phi = pmb->meshblock_data.Get()->Get("gravity.phi").data;
+  auto &rhs = pmb->meshblock_data.Get()->Get("gravity.rhs").data;
+  auto gravity_g = pin->GetOrAddReal("gravity", "gravity_constant", GRAVITY_G);
+  const Real four_pi_g = 4.0 * M_PI * gravity_g;
 
   pmb->par_for(
       "ProblemGenerator Evrard", kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
@@ -42,6 +49,9 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
         u(IM2, k, j, i) = 0.0;
         u(IM3, k, j, i) = 0.0;
         u(IEN, k, j, i) = u_therm * rho;
+
+        rhs(0, k, j, i) = four_pi_g * rho;
+        phi(0, k, j, i) = 0.0;
       });
 }
 } // namespace ec
