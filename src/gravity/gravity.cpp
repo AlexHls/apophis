@@ -142,6 +142,8 @@ TaskStatus ApplyGravity(std::shared_ptr<MeshData<Real>> &md, const Real dt) {
   auto jb = cellbounds.GetBoundsJ(IndexDomain::interior);
   auto kb = cellbounds.GetBoundsK(IndexDomain::interior);
 
+  const int ndim = pmb->pmy_mesh->ndim;
+
   pmb->par_for(
       "UpdateGravity", 0, cons_pack.GetDim(5) - 1, kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
       KOKKOS_LAMBDA(const int b, const int k, const int j, const int i) {
@@ -150,12 +152,19 @@ TaskStatus ApplyGravity(std::shared_ptr<MeshData<Real>> &md, const Real dt) {
         const auto &grav = grav_pack(b);
 
         cons(IM1, k, j, i) += grav(0, k, j, i) * w(IDN, k, j, i) * dt;
-        cons(IM2, k, j, i) += grav(1, k, j, i) * w(IDN, k, j, i) * dt;
-        cons(IM3, k, j, i) += grav(2, k, j, i) * w(IDN, k, j, i) * dt;
-        cons(IEN, k, j, i) +=
-            (grav(0, k, j, i) * w(IV1, k, j, i) + grav(1, k, j, i) * w(IV2, k, j, i) +
-             grav(2, k, j, i) * w(IV3, k, j, i)) *
-            w(IDN, k, j, i) * dt;
+        Real de = grav(0, k, j, i) * w(IV1, k, j, i);
+
+        if (ndim >= 2) {
+          cons(IM2, k, j, i) += grav(1, k, j, i) * w(IDN, k, j, i) * dt;
+          de += grav(1, k, j, i) * w(IV2, k, j, i);
+        }
+
+        if (ndim >= 3) {
+          cons(IM3, k, j, i) += grav(2, k, j, i) * w(IDN, k, j, i) * dt;
+          de += grav(2, k, j, i) * w(IV3, k, j, i);
+        }
+
+        cons(IEN, k, j, i) += de * w(IDN, k, j, i) * dt;
       });
 
   return TaskStatus::complete;

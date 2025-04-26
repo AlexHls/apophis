@@ -211,8 +211,11 @@ TaskID PoissonGravitySolver::AddTasks(TaskList &tl, TaskID dep, Mesh *pmesh,
     PARTHENON_FAIL("Unknown gravity solver type.");
   }
 
+  // Important, otherwise ghost cells of phi will not be updated
+  auto bnd_exchg = parthenon::AddBoundaryExchangeTasks(solve, tl, md0, pmesh->multilevel);
+
   auto comp_grav =
-      tl.AddTask(solve, &PoissonGravitySolver::ComputeGravityVector, this, md0);
+      tl.AddTask(bnd_exchg, &PoissonGravitySolver::ComputeGravityVector, this, md0);
 
   return comp_grav;
 }
