@@ -10,6 +10,7 @@
 #include <random>
 
 #include "../main.hpp"
+#include "pgen.hpp"
 
 namespace rt {
 using namespace parthenon::driver::prelude;
@@ -26,7 +27,6 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
   auto &rc = pmb->meshblock_data.Get();
   auto &u = rc->Get("cons").data;
   auto &coords = pmb->coords;
-  auto &g = rc->Get("gravity").data;
 
   if (iprob == 1) {
     // Read problem parameters
@@ -34,8 +34,6 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
     Real rho_upper = pin->GetReal("problem/rt", "rho_upper");
     Real perturb_strength = pin->GetReal("problem/rt", "perturb_strength");
     Real n_modes = pin->GetOrAddReal("problem/rt", "n_modes", 1.0);
-    Real grav_x_ini = pin->GetReal("gravity", "grav_x_ini");
-    Real grav_y_ini = pin->GetReal("gravity", "grav_y_ini");
 
     Real x1min = pin->GetReal("parthenon/mesh", "x1min");
     Real x1max = pin->GetReal("parthenon/mesh", "x1max");
@@ -61,9 +59,43 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
           u(IM3, k, j, i) = 0.0;
           // Careful, this does not allow for gravity in any direction
           // except the x2 direction
-          u(IEN, k, j, i) =
-              (1.0 / gam + grav_y_ini * u(IDN, k, j, i) * coords.Xc<2>(j)) / gm1;
+          u(IEN, k, j, i) = (1.0 / gam) / gm1;
           u(IEN, k, j, i) += 0.5 * SQR(u(IM2, k, j, i)) / u(IDN, k, j, i);
+        });
+  }
+
+  if (iprob >= 2) {
+    // TODO: implement this
+    PARTHENON_FAIL(
+        "ProblemGenerator: iprob >= 2 not implemented yet. Please use iprob=1");
+  }
+}
+
+void PostInitialization(MeshBlock *pmb, ParameterInput *pin) {
+  auto iprob = pin->GetInteger("problem/rt", "iprob");
+  auto ib = pmb->cellbounds.GetBoundsI(IndexDomain::interior);
+  auto jb = pmb->cellbounds.GetBoundsJ(IndexDomain::interior);
+  auto kb = pmb->cellbounds.GetBoundsK(IndexDomain::interior);
+  auto gam = pin->GetReal("hydro", "gamma");
+  auto gm1 = (gam - 1.0);
+
+  // initialize conserved variables
+  auto &rc = pmb->meshblock_data.Get();
+  auto &u = rc->Get("cons").data;
+  auto &coords = pmb->coords;
+  auto &g = rc->Get("gravity").data;
+
+  if (iprob == 1) {
+    // Read problem parameters
+    Real grav_x_ini = pin->GetReal("gravity", "grav_x_ini");
+    Real grav_y_ini = pin->GetReal("gravity", "grav_y_ini");
+
+    pmb->par_for(
+        "ProblemGenerator", kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
+        KOKKOS_LAMBDA(const int k, const int j, const int i) {
+          // Careful, this does not allow for gravity in any direction
+          // except the x2 direction
+          u(IEN, k, j, i) += grav_y_ini * u(IDN, k, j, i) * coords.Xc<2>(j) / gm1;
 
           g(0, k, j, i) = grav_x_ini;
           g(1, k, j, i) = grav_y_ini;

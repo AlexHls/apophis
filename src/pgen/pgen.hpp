@@ -40,6 +40,7 @@ namespace rt {
 using namespace parthenon::driver::prelude;
 
 void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin);
+void PostInitialization(MeshBlock *pmb, ParameterInput *pin);
 } // namespace rt
 
 namespace ec {
