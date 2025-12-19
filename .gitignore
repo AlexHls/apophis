@@ -51,3 +51,6 @@ build*/
 
 # Cache
 .cache/
+
+# Macos
+.DS_Store
