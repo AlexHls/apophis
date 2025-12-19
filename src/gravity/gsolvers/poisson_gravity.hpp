@@ -237,17 +237,17 @@ TaskStatus PoissonGravitySolver::ComputeRhs(std::shared_ptr<MeshData<Real>> &md)
   auto pack = desc.GetPack(md.get(), include_block);
 
   // TODO(alexhls): Include this in the pack descriptor
-  const auto cons_pack = md->PackVariables(std::vector<std::string>{"cons"});
+  const auto prim_pack = md->PackVariables(std::vector<std::string>{"prim"});
 
   const Real gravity_g = pkg->Param<Real>("gravity_constant");
   const Real four_pi_g = 4.0 * M_PI * gravity_g;
 
   parthenon::par_for(
-      "BuildRhs", 0, cons_pack.GetDim(5) - 1, kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
+      "BuildRhs", 0, prim_pack.GetDim(5) - 1, kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
       KOKKOS_LAMBDA(const int b, const int k, const int j, const int i) {
-        const auto &cons = cons_pack(b);
+        const auto &prim = prim_pack(b);
 
-        pack(b, te, rhs(), k, j, i) = four_pi_g * cons(IDN, k, j, i);
+        pack(b, te, rhs(), k, j, i) = four_pi_g * prim(IDN, k, j, i);
       });
   return TaskStatus::complete;
 }
@@ -255,7 +255,6 @@ TaskStatus PoissonGravitySolver::ComputeRhs(std::shared_ptr<MeshData<Real>> &md)
 TaskStatus
 PoissonGravitySolver::ComputeGravityVector(std::shared_ptr<MeshData<Real>> &md) {
   auto pmb = md->GetBlockData(0)->GetBlockPointer();
-  auto cons_pack = md->PackVariables(std::vector<std::string>{"cons"});
   const auto prim_pack = md->PackVariables(std::vector<std::string>{"prim"});
   auto grav_pack = md->PackVariables(std::vector<std::string>{"gravity"});
   const auto phi_pack = md->PackVariables(std::vector<std::string>{"gravity.phi"});
@@ -271,7 +270,7 @@ PoissonGravitySolver::ComputeGravityVector(std::shared_ptr<MeshData<Real>> &md) 
   const int ndim = pmb->pmy_mesh->ndim;
 
   pmb->par_for(
-      "UpdateGravity", 0, cons_pack.GetDim(5) - 1, kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
+      "UpdateGravity", 0, prim_pack.GetDim(5) - 1, kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
       KOKKOS_LAMBDA(const int b, const int k, const int j, const int i) {
         const auto &phi = phi_pack(b);
         auto &grav = grav_pack(b);

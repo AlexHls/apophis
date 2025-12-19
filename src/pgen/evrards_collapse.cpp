@@ -48,10 +48,10 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
         u(IM1, k, j, i) = 0.0;
         u(IM2, k, j, i) = 0.0;
         u(IM3, k, j, i) = 0.0;
-        u(IEN, k, j, i) = u_therm * rho;
+        u(IEN, k, j, i) = gm1 * u_therm * rho;
 
         rhs(0, k, j, i) = four_pi_g * rho;
-        phi(0, k, j, i) = 0.0;
+        phi(0, k, j, i) = -gravity_g * 1.0 / r;
       });
 }
 } // namespace ec
