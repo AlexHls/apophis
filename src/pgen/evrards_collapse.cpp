@@ -16,8 +16,6 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
   auto mass = pin->GetReal("problem", "mass");
   auto radius = pin->GetReal("problem", "radius");
   auto u_therm = pin->GetReal("problem", "u_therm");
-  auto gam = pin->GetReal("hydro", "gamma");
-  auto gm1 = (gam - 1.0);
 
   IndexRange ib = pmb->cellbounds.GetBoundsI(IndexDomain::entire);
   IndexRange jb = pmb->cellbounds.GetBoundsJ(IndexDomain::entire);
@@ -48,7 +46,7 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
         u(IM1, k, j, i) = 0.0;
         u(IM2, k, j, i) = 0.0;
         u(IM3, k, j, i) = 0.0;
-        u(IEN, k, j, i) = gm1 * u_therm * rho;
+        u(IEN, k, j, i) = u_therm * rho;
 
         rhs(0, k, j, i) = four_pi_g * rho;
         phi(0, k, j, i) = -gravity_g * 1.0 / r;
