@@ -54,3 +54,6 @@ build*/
 
 # Macos
 .DS_Store
+
+# Jetbrains
+.idea/
