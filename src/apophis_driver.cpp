@@ -60,7 +60,11 @@ TaskCollection ApophisDriver::MakeTaskCollection(BlockList_t &blocks, int stage)
   for (int i = 0; i < num_partitions; i++) {
     auto &tl = single_tasklist_per_pack_region[i];
     auto &mu0 = pmesh->mesh_data.GetOrAdd("base", i);
-    tl.AddTask(none, parthenon::StartReceiveFluxCorrections, mu0);
+
+    auto gsolver = grav_pkg->Param<std::shared_ptr<GravitySolver>>("gravity_solver");
+    auto calc_gravity = gsolver->AddTasks(tl, none, pmesh, i);
+
+    tl.AddTask(calc_gravity, parthenon::StartReceiveFluxCorrections, mu0);
 
     const auto flux_str = (stage == 1) ? "flux_first_stage" : "flux_other_stage";
     FluxFun_t *calc_flux_fun = hydro_pkg->Param<FluxFun_t *>(flux_str);
@@ -76,9 +80,7 @@ TaskCollection ApophisDriver::MakeTaskCollection(BlockList_t &blocks, int stage)
         mu1.get(), integrator->gam0[stage - 1], integrator->gam1[stage - 1],
         integrator->beta[stage - 1] * integrator->dt);
 
-    auto gsolver = grav_pkg->Param<std::shared_ptr<GravitySolver>>("gravity_solver");
-    auto calc_gravity = gsolver->AddTasks(tl, update, pmesh, i);
-    auto gravity = tl.AddTask(calc_gravity, ApplyGravity, mu0,
+    auto gravity = tl.AddTask(update, ApplyGravity, mu0,
                               integrator->beta[stage - 1] * integrator->dt);
 
     const auto nlset = hydro_pkg->Param<int>("nlset");
