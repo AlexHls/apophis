@@ -40,7 +40,6 @@ TaskID MonopoleGravitySolver::AddTasks(TaskList &tl, TaskID dep, Mesh *pmesh,
   auto zero = tl.AddTask(dep, &MonopoleGravitySolver::ZeroRadialBins, this, md0);
   auto accum = tl.AddTask(zero, &MonopoleGravitySolver::AccumulateMass, this, md0);
 
-  // Fill the reduction vector with accumulated mass from m_local
   auto fill_reduce = tl.AddTask(parthenon::TaskQualifier::local_sync, accum, [this]() {
     auto m_local_host = Kokkos::create_mirror_view(m_local_);
     Kokkos::deep_copy(m_local_host, m_local_);
@@ -50,9 +49,8 @@ TaskID MonopoleGravitySolver::AddTasks(TaskList &tl, TaskID dep, Mesh *pmesh,
     return TaskStatus::complete;
   });
 
-  // Global reduction: sum m_local across all ranks
   auto start_reduce =
-      tl.AddTask(parthenon::TaskQualifier::local_sync, fill_reduce,
+      tl.AddTask(parthenon::TaskQualifier::once_per_region, fill_reduce,
                  &AllReduce<std::vector<Real>>::StartReduce, &reduce_mass_, MPI_SUM);
 
   auto check_reduce = tl.AddTask(
@@ -70,22 +68,18 @@ TaskID MonopoleGravitySolver::AddTasks(TaskList &tl, TaskID dep, Mesh *pmesh,
 }
 
 MonopoleGravitySolver::MonopoleGravitySolver(ParameterInput *pin) : GravitySolver(pin) {
-  // If nrbin set to -1, nrbin=nx
   nrbin_ = pin->GetOrAddInteger("gravity", "nrbin", -1);
   if (nrbin_ <= 0) {
     const int nx = pin->GetInteger("parthenon/mesh", "nx");
     nrbin_ = nx;
   }
 
-  // Allocate Kokkos views
   m_local_ = Kokkos::View<Real *>("m_local", nrbin_);
   m_enc_ = Kokkos::View<Real *>("m_enc", nrbin_);
 
-  // Initialize to zero
   Kokkos::deep_copy(m_local_, 0.0);
   Kokkos::deep_copy(m_enc_, 0.0);
 
-  // Initialize the reduction vector
   reduce_mass_.val.resize(nrbin_, 0.0);
 }
 
@@ -130,29 +124,24 @@ TaskStatus MonopoleGravitySolver::AccumulateMass(std::shared_ptr<MeshData<Real>>
         Kokkos::atomic_add(&m_local_dev(bin), dm);
       });
 
-  // Copy results to m_local_ for reduction
   Kokkos::deep_copy(m_local_, m_local_dev);
   return TaskStatus::complete;
 }
 
 TaskStatus MonopoleGravitySolver::PrefixSum(std::shared_ptr<MeshData<Real>> &md) {
-  // Copy to host to perform serial prefix sum
   auto m_enc_host = Kokkos::create_mirror_view(m_enc_);
   Kokkos::deep_copy(m_enc_host, m_enc_);
 
-  // Serial prefix sum on host
   for (int i = 1; i < nrbin_; i++) {
     m_enc_host(i) += m_enc_host(i - 1);
   }
 
-  // Copy back to device
   Kokkos::deep_copy(m_enc_, m_enc_host);
   return TaskStatus::complete;
 }
 
 TaskStatus
 MonopoleGravitySolver::TransferMassToEnclosed(std::shared_ptr<MeshData<Real>> &md) {
-  // Copy reduced m_local from the AllReduce result to m_enc
   auto m_enc_host = Kokkos::create_mirror_view(m_enc_);
   for (int i = 0; i < nrbin_; i++) {
     m_enc_host(i) = reduce_mass_.val[i];
@@ -163,7 +152,6 @@ MonopoleGravitySolver::TransferMassToEnclosed(std::shared_ptr<MeshData<Real>> &m
 
 TaskStatus
 MonopoleGravitySolver::ComputeGravityVectorDirect(std::shared_ptr<MeshData<Real>> &md) {
-  // Compute gravity directly from enclosed mass without computing phi
   auto pmb = md->GetBlockData(0)->GetBlockPointer();
   const auto prim_pack = md->PackVariables(std::vector<std::string>{"prim"});
   auto grav_pack = md->PackVariables(std::vector<std::string>{"gravity"});
@@ -186,40 +174,49 @@ MonopoleGravitySolver::ComputeGravityVectorDirect(std::shared_ptr<MeshData<Real>
         const auto &coords = prim_pack.GetCoords(b);
 
         const Real x = coords.Xc<1>(i);
-        const Real dx = coords.Dxc<1>(i);
-        const Real y = coords.Xc<2>(j);
-        const Real z = coords.Xc<3>(k);
-        const Real r = std::sqrt(x * x + y * y + z * z);
+        const Real y = (ndim >= 2) ? coords.Xc<2>(j) : 0.0;
+        const Real z = (ndim >= 3) ? coords.Xc<3>(k) : 0.0;
+
+        const Real r2 = x * x + y * y + z * z;
+        const Real r = std::sqrt(r2);
 
         auto &grav = grav_pack(b);
 
-        if (r < dx) {
-          // Avoid singularity at origin
+        if (r < 1e-10) {
           grav(0, k, j, i) = 0.0;
           if (ndim >= 2) grav(1, k, j, i) = 0.0;
           if (ndim >= 3) grav(2, k, j, i) = 0.0;
           return;
         }
 
-        // Determine which radial bin this point is in
         Real m_enclosed;
         if (r >= rmax) {
           m_enclosed = m_enc_(nrbin_ - 1);
         } else {
-          int bin = static_cast<int>(r / dr);
-          // Clamp bin to valid range
-          if (bin >= nrbin_) bin = nrbin_ - 1;
+          const Real rf = r / dr;
+          int bin = static_cast<int>(rf);
+
           if (bin < 0) bin = 0;
-          m_enclosed = m_enc_(bin);
+          if (bin >= nrbin_ - 1) bin = nrbin_ - 2;
+
+          const Real frac = rf - bin;
+          m_enclosed = (1.0 - frac) * m_enc_(bin) + frac * m_enc_(bin + 1);
         }
 
-        // Gravitational acceleration: g = -G*M_enc/r^2 in radial direction
-        const Real g_r = -gravity_g * m_enclosed / (r * r);
+        Real g_r;
+        // FIXME; 1D and 2D probably don't work as intendet
+        if (ndim == 1) {
+          g_r = -gravity_g * m_enclosed;
+        } else if (ndim == 2) {
+          g_r = -2.0 * gravity_g * m_enclosed / r;
+        } else {
+          g_r = -gravity_g * m_enclosed / r2;
+        }
 
-        // Convert to Cartesian components
-        grav(0, k, j, i) = g_r * x / r;
-        if (ndim >= 2) grav(1, k, j, i) = g_r * y / r;
-        if (ndim >= 3) grav(2, k, j, i) = g_r * z / r;
+        const Real rinv = 1.0 / r;
+        grav(0, k, j, i) = g_r * x * rinv;
+        if (ndim >= 2) grav(1, k, j, i) = g_r * y * rinv;
+        if (ndim >= 3) grav(2, k, j, i) = g_r * z * rinv;
       });
   return TaskStatus::complete;
 }
