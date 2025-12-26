@@ -41,22 +41,20 @@ TaskID MonopoleGravitySolver::AddTasks(TaskList &tl, TaskID dep, Mesh *pmesh,
   auto accum = tl.AddTask(zero, &MonopoleGravitySolver::AccumulateMass, this, md0);
 
   // Fill the reduction vector with accumulated mass from m_local
-  auto fill_reduce = tl.AddTask(
-      parthenon::TaskQualifier::local_sync, accum,
-      [this]() {
-        auto m_local_host = Kokkos::create_mirror_view(m_local_);
-        Kokkos::deep_copy(m_local_host, m_local_);
-        for (int i = 0; i < nrbin_; i++) {
-          reduce_mass_.val[i] = m_local_host(i);
-        }
-        return TaskStatus::complete;
-      });
+  auto fill_reduce = tl.AddTask(parthenon::TaskQualifier::local_sync, accum, [this]() {
+    auto m_local_host = Kokkos::create_mirror_view(m_local_);
+    Kokkos::deep_copy(m_local_host, m_local_);
+    for (int i = 0; i < nrbin_; i++) {
+      reduce_mass_.val[i] = m_local_host(i);
+    }
+    return TaskStatus::complete;
+  });
 
   // Global reduction: sum m_local across all ranks
-  auto start_reduce = tl.AddTask(
-      parthenon::TaskQualifier::local_sync, fill_reduce,
-      &AllReduce<std::vector<Real>>::StartReduce, &reduce_mass_, MPI_SUM);
-  
+  auto start_reduce =
+      tl.AddTask(parthenon::TaskQualifier::local_sync, fill_reduce,
+                 &AllReduce<std::vector<Real>>::StartReduce, &reduce_mass_, MPI_SUM);
+
   auto check_reduce = tl.AddTask(
       parthenon::TaskQualifier::once_per_region | parthenon::TaskQualifier::local_sync,
       start_reduce, &AllReduce<std::vector<Real>>::CheckReduce, &reduce_mass_);
@@ -64,10 +62,9 @@ TaskID MonopoleGravitySolver::AddTasks(TaskList &tl, TaskID dep, Mesh *pmesh,
   auto transfer =
       tl.AddTask(check_reduce, &MonopoleGravitySolver::TransferMassToEnclosed, this, md0);
   auto prefix = tl.AddTask(transfer, &MonopoleGravitySolver::PrefixSum, this, md0);
-  auto phi_r = tl.AddTask(prefix, &MonopoleGravitySolver::ComputeRadialPhi, this, md0);
 
   auto comp_grav =
-      tl.AddTask(phi_r, &MonopoleGravitySolver::ComputeGravityVectorDirect, this, md0);
+      tl.AddTask(prefix, &MonopoleGravitySolver::ComputeGravityVectorDirect, this, md0);
 
   return comp_grav;
 }
@@ -83,12 +80,10 @@ MonopoleGravitySolver::MonopoleGravitySolver(ParameterInput *pin) : GravitySolve
   // Allocate Kokkos views
   m_local_ = Kokkos::View<Real *>("m_local", nrbin_);
   m_enc_ = Kokkos::View<Real *>("m_enc", nrbin_);
-  phi_rad_ = Kokkos::View<Real *>("phi_rad", nrbin_);
 
   // Initialize to zero
   Kokkos::deep_copy(m_local_, 0.0);
   Kokkos::deep_copy(m_enc_, 0.0);
-  Kokkos::deep_copy(phi_rad_, 0.0);
 
   // Initialize the reduction vector
   reduce_mass_.val.resize(nrbin_, 0.0);
@@ -166,41 +161,6 @@ MonopoleGravitySolver::TransferMassToEnclosed(std::shared_ptr<MeshData<Real>> &m
   return TaskStatus::complete;
 }
 
-TaskStatus MonopoleGravitySolver::ComputeRadialPhi(std::shared_ptr<MeshData<Real>> &md) {
-  auto pmb = md->GetBlockData(0)->GetBlockPointer();
-  auto pkg = pmb->packages.Get("Gravity");
-  const Real gravity_g = pkg->Param<Real>("gravity_constant");
-  const Real rmax = pkg->Param<Real>("rmax");
-
-  const Real dr = rmax / nrbin_;
-
-  // Copy to host for serial computation
-  auto m_enc_host = Kokkos::create_mirror_view(m_enc_);
-  Kokkos::deep_copy(m_enc_host, m_enc_);
-  auto phi_rad_host = Kokkos::create_mirror_view(phi_rad_);
-
-  std::vector<Real> dm(nrbin_);
-  dm[0] = m_enc_host(0);
-  for (int i = 1; i < nrbin_; i++) {
-    dm[i] = m_enc_host(i) - m_enc_host(i - 1);
-  }
-
-  std::vector<Real> tail(nrbin_);
-  tail[nrbin_ - 1] = 0.0;
-  for (int i = nrbin_ - 2; i >= 0; i--) {
-    const Real r = (i + 1.5) * dr;
-    tail[i] = tail[i + 1] + dm[i + 1] / r;
-  }
-
-  for (int i = 0; i < nrbin_; i++) {
-    const Real r = (i + 0.5) * dr;
-    phi_rad_host(i) = (r > 0.0) ? -gravity_g * (m_enc_host(i) / r + tail[i]) : 0.0;
-  }
-
-  Kokkos::deep_copy(phi_rad_, phi_rad_host);
-  return TaskStatus::complete;
-}
-
 TaskStatus
 MonopoleGravitySolver::ComputeGravityVectorDirect(std::shared_ptr<MeshData<Real>> &md) {
   // Compute gravity directly from enclosed mass without computing phi
@@ -220,23 +180,20 @@ MonopoleGravitySolver::ComputeGravityVectorDirect(std::shared_ptr<MeshData<Real>
 
   const int ndim = pmb->pmy_mesh->ndim;
 
-  // Copy m_enc to host for kernel access (will be captured by value)
-  auto m_enc_host = Kokkos::create_mirror_view(m_enc_);
-  Kokkos::deep_copy(m_enc_host, m_enc_);
-
   pmb->par_for(
       "UpdateGravityDirect", 0, prim_pack.GetDim(5) - 1, kb.s, kb.e, jb.s, jb.e, ib.s,
       ib.e, KOKKOS_LAMBDA(const int b, const int k, const int j, const int i) {
         const auto &coords = prim_pack.GetCoords(b);
 
         const Real x = coords.Xc<1>(i);
+        const Real dx = coords.Dxc<1>(i);
         const Real y = coords.Xc<2>(j);
         const Real z = coords.Xc<3>(k);
         const Real r = std::sqrt(x * x + y * y + z * z);
 
         auto &grav = grav_pack(b);
 
-        if (r < 1.e-10) {
+        if (r < dx) {
           // Avoid singularity at origin
           grav(0, k, j, i) = 0.0;
           if (ndim >= 2) grav(1, k, j, i) = 0.0;
@@ -247,10 +204,13 @@ MonopoleGravitySolver::ComputeGravityVectorDirect(std::shared_ptr<MeshData<Real>
         // Determine which radial bin this point is in
         Real m_enclosed;
         if (r >= rmax) {
-          m_enclosed = m_enc_host(nrbin_ - 1);
+          m_enclosed = m_enc_(nrbin_ - 1);
         } else {
           int bin = static_cast<int>(r / dr);
-          m_enclosed = m_enc_host(bin);
+          // Clamp bin to valid range
+          if (bin >= nrbin_) bin = nrbin_ - 1;
+          if (bin < 0) bin = 0;
+          m_enclosed = m_enc_(bin);
         }
 
         // Gravitational acceleration: g = -G*M_enc/r^2 in radial direction
