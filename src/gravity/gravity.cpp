@@ -3,6 +3,7 @@
 #include "../main.hpp"
 #include "KokkosCore_Config_SetupBackend.hpp"
 #include "gsolvers/constant_gravity.hpp"
+#include "gsolvers/monopole_gravity.hpp"
 #include "gsolvers/none_gravity.hpp"
 #include "gsolvers/poisson_gravity.hpp"
 #include "interface/state_descriptor.hpp"
@@ -52,6 +53,9 @@ std::shared_ptr<parthenon::StateDescriptor> InitializeGravity(ParameterInput *pi
   } else if (gravity_str == "constant") {
     gravity = Gravity::constant;
     solver = std::make_shared<ConstantGravitySolver>(pin);
+  } else if (gravity_str == "monopole") {
+    gravity = Gravity::monopole;
+    solver = std::make_shared<MonopoleGravitySolver>(pin);
   } else if (gravity_str == "poisson") {
     gravity = Gravity::poisson;
     solver = std::make_shared<PoissonGravitySolver>(pin);
@@ -72,6 +76,13 @@ std::shared_ptr<parthenon::StateDescriptor> InitializeGravity(ParameterInput *pi
                                std::vector<int>({3}), labels);
 
   pkg->AddField(field_name, m);
+
+  // If multipole solver, add solver settings
+  if (gravity == Gravity::monopole) {
+    // nrbin and arrays are now handled in MonopoleGravitySolver constructor
+    const Real rmax = pin->GetInteger("gravity", "rmax");
+    pkg->AddParam<Real>("rmax", rmax);
+  }
 
   // If poisson solver, add the potential field and set solver settings
   if (gravity == Gravity::poisson) {

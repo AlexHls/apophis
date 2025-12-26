@@ -55,6 +55,7 @@ enum class Gravity {
   undefined,
   none,
   constant,
+  monopole,
   poisson,
 };
 
