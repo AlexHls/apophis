@@ -30,7 +30,7 @@ struct MonopoleGravitySolver : GravitySolver {
   Kokkos::View<Real *> m_enc_;
   Kokkos::View<Real *> phi_rad_;
 
-  parthenon::AllReduce<Real> reduce_mass_;
+  parthenon::AllReduce<std::vector<Real>> reduce_mass_;
 };
 
 TaskID MonopoleGravitySolver::AddTasks(TaskList &tl, TaskID dep, Mesh *pmesh,
@@ -40,8 +40,29 @@ TaskID MonopoleGravitySolver::AddTasks(TaskList &tl, TaskID dep, Mesh *pmesh,
   auto zero = tl.AddTask(dep, &MonopoleGravitySolver::ZeroRadialBins, this, md0);
   auto accum = tl.AddTask(zero, &MonopoleGravitySolver::AccumulateMass, this, md0);
 
+  // Fill the reduction vector with accumulated mass from m_local
+  auto fill_reduce = tl.AddTask(
+      parthenon::TaskQualifier::local_sync, accum,
+      [this]() {
+        auto m_local_host = Kokkos::create_mirror_view(m_local_);
+        Kokkos::deep_copy(m_local_host, m_local_);
+        for (int i = 0; i < nrbin_; i++) {
+          reduce_mass_.val[i] = m_local_host(i);
+        }
+        return TaskStatus::complete;
+      });
+
+  // Global reduction: sum m_local across all ranks
+  auto start_reduce = tl.AddTask(
+      parthenon::TaskQualifier::local_sync, fill_reduce,
+      &AllReduce<std::vector<Real>>::StartReduce, &reduce_mass_, MPI_SUM);
+  
+  auto check_reduce = tl.AddTask(
+      parthenon::TaskQualifier::once_per_region | parthenon::TaskQualifier::local_sync,
+      start_reduce, &AllReduce<std::vector<Real>>::CheckReduce, &reduce_mass_);
+
   auto transfer =
-      tl.AddTask(accum, &MonopoleGravitySolver::TransferMassToEnclosed, this, md0);
+      tl.AddTask(check_reduce, &MonopoleGravitySolver::TransferMassToEnclosed, this, md0);
   auto prefix = tl.AddTask(transfer, &MonopoleGravitySolver::PrefixSum, this, md0);
   auto phi_r = tl.AddTask(prefix, &MonopoleGravitySolver::ComputeRadialPhi, this, md0);
 
@@ -68,6 +89,9 @@ MonopoleGravitySolver::MonopoleGravitySolver(ParameterInput *pin) : GravitySolve
   Kokkos::deep_copy(m_local_, 0.0);
   Kokkos::deep_copy(m_enc_, 0.0);
   Kokkos::deep_copy(phi_rad_, 0.0);
+
+  // Initialize the reduction vector
+  reduce_mass_.val.resize(nrbin_, 0.0);
 }
 
 TaskStatus MonopoleGravitySolver::ZeroRadialBins(std::shared_ptr<MeshData<Real>> &md) {
@@ -111,15 +135,8 @@ TaskStatus MonopoleGravitySolver::AccumulateMass(std::shared_ptr<MeshData<Real>>
         Kokkos::atomic_add(&m_local_dev(bin), dm);
       });
 
-  // Copy results back to m_local_
-  auto m_local_host = Kokkos::create_mirror_view(m_local_dev);
-  Kokkos::deep_copy(m_local_host, m_local_dev);
-  auto m_local_host_orig = Kokkos::create_mirror_view(m_local_);
-  Kokkos::deep_copy(m_local_host_orig, m_local_);
-  for (int i = 0; i < nrbin_; i++) {
-    m_local_host_orig(i) = m_local_host(i);
-  }
-  Kokkos::deep_copy(m_local_, m_local_host_orig);
+  // Copy results to m_local_ for reduction
+  Kokkos::deep_copy(m_local_, m_local_dev);
   return TaskStatus::complete;
 }
 
@@ -140,8 +157,12 @@ TaskStatus MonopoleGravitySolver::PrefixSum(std::shared_ptr<MeshData<Real>> &md)
 
 TaskStatus
 MonopoleGravitySolver::TransferMassToEnclosed(std::shared_ptr<MeshData<Real>> &md) {
-  // Copy m_local to m_enc
-  Kokkos::deep_copy(m_enc_, m_local_);
+  // Copy reduced m_local from the AllReduce result to m_enc
+  auto m_enc_host = Kokkos::create_mirror_view(m_enc_);
+  for (int i = 0; i < nrbin_; i++) {
+    m_enc_host(i) = reduce_mass_.val[i];
+  }
+  Kokkos::deep_copy(m_enc_, m_enc_host);
   return TaskStatus::complete;
 }
 
