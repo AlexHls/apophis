@@ -3,6 +3,7 @@
 
 #include "../main.hpp"
 
+#include "interface/mesh_data.hpp"
 #include "parthenon/parthenon.hpp"
 #include <singularity-eos/eos/eos_helmholtz.hpp>
 #include <singularity-eos/eos/eos_ideal.hpp>
@@ -44,6 +45,9 @@ constexpr size_t GetNVars<Fluid::euler>() {
 }
 
 using EOS_t = singularity::Variant<singularity::IdealGas, singularity::Helmholtz>;
+
+template <typename T, int idx>
+Real GlobalQuantHst(MeshData<Real> *md);
 
 } // namespace Apophis
 

@@ -4,6 +4,8 @@
 #include "../recon/plm_simple.hpp"
 #include "../recon/ppm_simple.hpp"
 #include "../refinement/refinement.hpp"
+#include "Kokkos_Macros.hpp"
+#include "outputs/outputs.hpp"
 #include "rsolvers/hydro_hllc.hpp"
 #include "rsolvers/hydro_hlle.hpp"
 #include "rsolvers/hydro_lhllc.hpp"
@@ -12,6 +14,9 @@
 #include "interface/state_descriptor.hpp"
 #include "kokkos_abstraction.hpp"
 #include "parthenon/parthenon.hpp"
+#include "utils/instrument.hpp"
+#include <array>
+#include <memory>
 #include <parthenon/package.hpp>
 
 using parthenon::DevExecSpace;
@@ -319,6 +324,18 @@ std::shared_ptr<parthenon::StateDescriptor> InitializeHydro(ParameterInput *pin)
     pkg->AddParam<Real>("refinement/maxdensity_deref_below", deref_below);
     pkg->AddParam<Real>("refinement/maxdensity_refine_above", refine_above);
   }
+
+  // Hst output
+  parthenon::HstVar_list hst_vars = {};
+
+  hst_vars.emplace_back(parthenon::HistoryOutputVar(
+      parthenon::UserHistoryOperation::sum,
+      GlobalQuantHst<Kokkos::Sum<Real, parthenon::HostExecSpace>, IDN>, "total_mass"));
+  hst_vars.emplace_back(parthenon::HistoryOutputVar(
+      parthenon::UserHistoryOperation::sum,
+      GlobalQuantHst<Kokkos::Sum<Real, parthenon::HostExecSpace>, IEN>, "total_energy"));
+
+  pkg->AddParam<>(parthenon::hist_param_key, hst_vars);
 
   return pkg;
 }
@@ -716,6 +733,33 @@ TaskStatus CalculateFluxes(std::shared_ptr<MeshData<Real>> &md) {
   }
 
   return TaskStatus::complete;
+}
+
+template <typename T, int idx>
+Real GlobalQuantHst(MeshData<Real> *md) {
+  auto pmb = md->GetBlockData(0)->GetBlockPointer();
+
+  const auto ib = pmb->cellbounds.GetBoundsI(IndexDomain::interior);
+  const auto jb = pmb->cellbounds.GetBoundsJ(IndexDomain::interior);
+  const auto kb = pmb->cellbounds.GetBoundsK(IndexDomain::interior);
+
+  const auto &cons_pack = md->PackVariables(std::vector<std::string>{"cons"});
+
+  Real result = 0.0;
+
+  T reducer(result);
+  parthenon::par_reduce(
+      parthenon::loop_pattern_mdrange_tag, PARTHENON_AUTO_LABEL, DevExecSpace(), 0,
+      cons_pack.GetDim(5) - 1, kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
+      KOKKOS_LAMBDA(const int b, const int k, const int j, const int i, Real &lresult) {
+        const auto &coords = cons_pack.GetCoords(b);
+
+        const Real vol = coords.CellVolume(k, j, i);
+        reducer.join(lresult, cons_pack(b, idx, k, j, i) * vol);
+      },
+      reducer);
+
+  return result;
 }
 
 } // namespace Apophis
