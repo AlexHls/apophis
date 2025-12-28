@@ -86,6 +86,11 @@ std::shared_ptr<parthenon::StateDescriptor> InitializeGravity(ParameterInput *pi
 
   // If poisson solver, add the potential field and set solver settings
   if (gravity == Gravity::poisson) {
+    // Multipole coefficients for boundary conditions
+    parthenon::AllReduce<parthenon::HostArray1D<Real>> mpcoeff;
+    mpcoeff.val = parthenon::HostArray1D<Real>("mpcoeff", 9);
+    pkg->AddParam("mpcoeff", mpcoeff, true);
+
     // Special boundary conditions for the potential field
     using BF = parthenon::BoundaryFace;
     pkg->UserBoundaryFunctions[BF::inner_x1].push_back(GetBC<X1DIR, BCSide::Inner>());

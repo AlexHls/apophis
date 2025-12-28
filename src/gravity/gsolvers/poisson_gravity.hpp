@@ -2,11 +2,13 @@
 #define GRAVITY_GSOLVERS_POISSON_GRAVITY_HPP_
 
 #include "../gravity.hpp"
+#include "basic_types.hpp"
 #include "solvers/bicgstab_solver.hpp"
 #include "solvers/mg_solver.hpp"
 #include "solvers/solver_utils.hpp"
 
 #include "../../main.hpp"
+#include <memory>
 
 using namespace parthenon::driver::prelude;
 
@@ -180,14 +182,31 @@ struct PoissonGravitySolver : GravitySolver {
                          const int partition) override;
   TaskID AddTasks(TaskList &tl, TaskID dep, Mesh *pmesh, const int partition) override;
 
+  TaskStatus ComputeMPCoeff(std::shared_ptr<MeshData<Real>> &md);
   TaskStatus ComputeRhs(std::shared_ptr<MeshData<Real>> &md);
   TaskStatus ComputeGravityVector(std::shared_ptr<MeshData<Real>> &md);
 };
 
 TaskID PoissonGravitySolver::PreComputeTasks(TaskList &tl, TaskID dep, Mesh *pmesh,
                                              const int partition) {
-  // TODO
-  return dep;
+
+  auto &md0 = pmesh->mesh_data.GetOrAdd("base", partition);
+
+  auto comp_mpcoeff = tl.AddTask(dep, &PoissonGravitySolver::ComputeMPCoeff, this, md0);
+
+  auto pkg = pmesh->packages.Get<parthenon::StateDescriptor>("Gravity");
+  AllReduce<parthenon::HostArray1D<Real>> *mpcoeff =
+      pkg->MutableParam<AllReduce<parthenon::HostArray1D<Real>>>("mpcoeff");
+
+  auto start_reduce =
+      tl.AddTask(TaskQualifier::once_per_region, comp_mpcoeff,
+                 &AllReduce<parthenon::HostArray1D<Real>>::StartReduce, mpcoeff, MPI_SUM);
+  // test the reduction until it completes
+  auto finish_reduce =
+      tl.AddTask(TaskQualifier::once_per_region | TaskQualifier::local_sync, start_reduce,
+                 &AllReduce<parthenon::HostArray1D<Real>>::CheckReduce, mpcoeff);
+
+  return finish_reduce;
 }
 
 TaskID PoissonGravitySolver::AddTasks(TaskList &tl, TaskID dep, Mesh *pmesh,
@@ -226,6 +245,61 @@ TaskID PoissonGravitySolver::AddTasks(TaskList &tl, TaskID dep, Mesh *pmesh,
       tl.AddTask(bnd_exchg, &PoissonGravitySolver::ComputeGravityVector, this, md0);
 
   return comp_grav;
+}
+
+TaskStatus PoissonGravitySolver::ComputeMPCoeff(std::shared_ptr<MeshData<Real>> &md) {
+  auto pmb = md->GetBlockData(0)->GetBlockPointer();
+  const auto prim_pack = md->PackVariables(std::vector<std::string>{"prim"});
+
+  const auto &cellbounds = pmb->cellbounds;
+  auto ib = cellbounds.GetBoundsI(IndexDomain::interior);
+  auto jb = cellbounds.GetBoundsJ(IndexDomain::interior);
+  auto kb = cellbounds.GetBoundsK(IndexDomain::interior);
+
+  auto pkg = pmb->packages.Get("Gravity");
+  AllReduce<parthenon::HostArray1D<Real>> *mpcoeff =
+      pkg->MutableParam<AllReduce<parthenon::HostArray1D<Real>>>("mpcoeff");
+
+  // Reset to zero
+  for (int n = 0; n < 10; n++) {
+    mpcoeff->val(n) = 0.0;
+  }
+
+  pmb->par_for(
+      "ComputeMPCoeff", 0, prim_pack.GetDim(5) - 1, kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
+      KOKKOS_LAMBDA(const int b, const int k, const int j, const int i) {
+        const auto &coords = prim_pack.GetCoords(b);
+        const Real vol = coords.CellVolume(k, j, i);
+
+        Real x = coords.Xc<1>(i);
+        Real y = coords.Xc<2>(j);
+        Real z = coords.Xc<3>(k);
+        Real r2 = x * x + y * y + z * z;
+
+        Real s = prim_pack(b, IDN, k, j, i) * vol;
+
+        Real m0 = s;
+        Real m1 = s * y;
+        Real m2 = s * z;
+        Real m3 = s * x;
+        Real m4 = s * x * y;
+        Real m5 = s * y * z;
+        Real m6 = s * (3.0 * z * z - r2);
+        Real m7 = s * z * x;
+        Real m8 = s * 0.5 * (x * x - y * y);
+
+        Kokkos::atomic_add(&mpcoeff->val(0), m0);
+        Kokkos::atomic_add(&mpcoeff->val(1), m1);
+        Kokkos::atomic_add(&mpcoeff->val(2), m2);
+        Kokkos::atomic_add(&mpcoeff->val(3), m3);
+        Kokkos::atomic_add(&mpcoeff->val(4), m4);
+        Kokkos::atomic_add(&mpcoeff->val(5), m5);
+        Kokkos::atomic_add(&mpcoeff->val(6), m6);
+        Kokkos::atomic_add(&mpcoeff->val(7), m7);
+        Kokkos::atomic_add(&mpcoeff->val(8), m8);
+      });
+
+  return TaskStatus::complete;
 }
 
 TaskStatus PoissonGravitySolver::ComputeRhs(std::shared_ptr<MeshData<Real>> &md) {
