@@ -62,7 +62,8 @@ TaskCollection ApophisDriver::MakeTaskCollection(BlockList_t &blocks, int stage)
     auto &mu0 = pmesh->mesh_data.GetOrAdd("base", i);
 
     auto gsolver = grav_pkg->Param<std::shared_ptr<GravitySolver>>("gravity_solver");
-    auto calc_gravity = gsolver->AddTasks(tl, none, pmesh, i);
+    auto pre_compute = gsolver->PreComputeTasks(tl, none, pmesh, i);
+    auto calc_gravity = gsolver->AddTasks(tl, pre_compute, pmesh, i);
 
     tl.AddTask(calc_gravity, parthenon::StartReceiveFluxCorrections, mu0);
 

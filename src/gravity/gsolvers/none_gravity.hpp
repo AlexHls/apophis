@@ -17,6 +17,11 @@ struct NoneGravitySolver : GravitySolver {
     // No tasks to add for None gravity
     return dependence;
   }
+  TaskID PreComputeTasks(TaskList &tl, TaskID dependence, Mesh *pmesh,
+                         const int partition) override {
+    // No precompute tasks to add for None gravity
+    return dependence;
+  }
 };
 
 } // namespace Apophis

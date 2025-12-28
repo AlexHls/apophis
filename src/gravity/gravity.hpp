@@ -15,6 +15,8 @@ struct GravitySolver {
   virtual ~GravitySolver() = default;
   virtual TaskID AddTasks(TaskList &tl, TaskID dependence, Mesh *pmesh,
                           const int partition) = 0;
+  virtual TaskID PreComputeTasks(TaskList &tl, TaskID dependence, Mesh *pmesh,
+                                 const int partition) = 0;
 
  protected:
   ParameterInput *pin_;

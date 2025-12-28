@@ -176,11 +176,19 @@ struct PoissonEquation {
 // Poisson gravity solver
 struct PoissonGravitySolver : GravitySolver {
   explicit PoissonGravitySolver(ParameterInput *pin) : GravitySolver(pin) {}
+  TaskID PreComputeTasks(TaskList &tl, TaskID dep, Mesh *pmesh,
+                         const int partition) override;
   TaskID AddTasks(TaskList &tl, TaskID dep, Mesh *pmesh, const int partition) override;
 
   TaskStatus ComputeRhs(std::shared_ptr<MeshData<Real>> &md);
   TaskStatus ComputeGravityVector(std::shared_ptr<MeshData<Real>> &md);
 };
+
+TaskID PoissonGravitySolver::PreComputeTasks(TaskList &tl, TaskID dep, Mesh *pmesh,
+                                             const int partition) {
+  // TODO
+  return dep;
+}
 
 TaskID PoissonGravitySolver::AddTasks(TaskList &tl, TaskID dep, Mesh *pmesh,
                                       const int partition) {

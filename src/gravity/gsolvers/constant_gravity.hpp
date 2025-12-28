@@ -18,6 +18,11 @@ struct ConstantGravitySolver : GravitySolver {
     // and does not need to be updated
     return dependence;
   }
+  TaskID PreComputeTasks(TaskList &tl, TaskID dependence, Mesh *pmesh,
+                         const int partition) override {
+    // No precompute tasks to add for constant gravity
+    return dependence;
+  }
 };
 
 } // namespace Apophis

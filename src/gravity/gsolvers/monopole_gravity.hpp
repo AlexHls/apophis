@@ -14,6 +14,8 @@ namespace Apophis {
 // Monopole gravity solver
 struct MonopoleGravitySolver : GravitySolver {
   explicit MonopoleGravitySolver(ParameterInput *pin);
+  TaskID PreComputeTasks(TaskList &tl, TaskID dep, Mesh *pmesh,
+                         const int partition) override;
   TaskID AddTasks(TaskList &tl, TaskID dep, Mesh *pmesh, const int partition) override;
 
   TaskStatus ZeroRadialBins(std::shared_ptr<MeshData<Real>> &md);
@@ -32,6 +34,14 @@ struct MonopoleGravitySolver : GravitySolver {
 
   parthenon::AllReduce<std::vector<Real>> reduce_mass_;
 };
+
+TaskID MonopoleGravitySolver::PreComputeTasks(TaskList &tl, TaskID dep, Mesh *pmesh,
+                                              const int partition) {
+  // TODO
+  // Nothing to be done, in the future compbine with monopole precompute of poisson
+  // gravity
+  return dep;
+}
 
 TaskID MonopoleGravitySolver::AddTasks(TaskList &tl, TaskID dep, Mesh *pmesh,
                                        const int partition) {
