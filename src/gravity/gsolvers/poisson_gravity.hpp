@@ -183,6 +183,7 @@ struct PoissonGravitySolver : GravitySolver {
   TaskID AddTasks(TaskList &tl, TaskID dep, Mesh *pmesh, const int partition) override;
 
   TaskStatus ComputeMPCoeff(std::shared_ptr<MeshData<Real>> &md);
+  TaskStatus ScaleMPCoeff(std::shared_ptr<MeshData<Real>> &md);
   TaskStatus ComputeRhs(std::shared_ptr<MeshData<Real>> &md);
   TaskStatus ComputeGravityVector(std::shared_ptr<MeshData<Real>> &md);
 };
@@ -206,7 +207,9 @@ TaskID PoissonGravitySolver::PreComputeTasks(TaskList &tl, TaskID dep, Mesh *pme
       tl.AddTask(TaskQualifier::once_per_region | TaskQualifier::local_sync, start_reduce,
                  &AllReduce<parthenon::HostArray1D<Real>>::CheckReduce, mpcoeff);
 
-  return finish_reduce;
+  auto scale = tl.AddTask(finish_reduce, &PoissonGravitySolver::ScaleMPCoeff, this, md0);
+
+  return scale;
 }
 
 TaskID PoissonGravitySolver::AddTasks(TaskList &tl, TaskID dep, Mesh *pmesh,
@@ -298,6 +301,33 @@ TaskStatus PoissonGravitySolver::ComputeMPCoeff(std::shared_ptr<MeshData<Real>> 
         Kokkos::atomic_add(&mpcoeff->val(7), m7);
         Kokkos::atomic_add(&mpcoeff->val(8), m8);
       });
+
+  return TaskStatus::complete;
+}
+
+TaskStatus PoissonGravitySolver::ScaleMPCoeff(std::shared_ptr<MeshData<Real>> &md) {
+  auto pmb = md->GetBlockData(0)->GetBlockPointer();
+
+  auto pkg = pmb->packages.Get("Gravity");
+  AllReduce<parthenon::HostArray1D<Real>> *mpcoeff =
+      pkg->MutableParam<AllReduce<parthenon::HostArray1D<Real>>>("mpcoeff");
+  const Real gravity_g = pkg->Param<Real>("gravity_constant");
+
+  // constants for multipole expansion
+  constexpr Real c0 = -0.25 / Kokkos::numbers::pi;
+  constexpr Real c1 = -0.25 / Kokkos::numbers::pi;
+  constexpr Real c2 = -0.0625 / Kokkos::numbers::pi;
+  constexpr Real c2a = -0.75 / Kokkos::numbers::pi;
+
+  mpcoeff->val(0) *= c0 * gravity_g;
+  mpcoeff->val(1) *= c1 * gravity_g;
+  mpcoeff->val(2) *= c1 * gravity_g;
+  mpcoeff->val(3) *= c1 * gravity_g;
+  mpcoeff->val(4) *= c2a * gravity_g;
+  mpcoeff->val(5) *= c2a * gravity_g;
+  mpcoeff->val(6) *= c2 * gravity_g;
+  mpcoeff->val(7) *= c2a * gravity_g;
+  mpcoeff->val(8) *= c2a * gravity_g;
 
   return TaskStatus::complete;
 }

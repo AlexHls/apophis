@@ -2,14 +2,17 @@
 #include "../constants.hpp"
 #include "../main.hpp"
 #include "KokkosCore_Config_SetupBackend.hpp"
+#include "basic_types.hpp"
 #include "gsolvers/constant_gravity.hpp"
 #include "gsolvers/monopole_gravity.hpp"
 #include "gsolvers/none_gravity.hpp"
 #include "gsolvers/poisson_gravity.hpp"
 #include "interface/state_descriptor.hpp"
 
+#include "kokkos_abstraction.hpp"
 #include "parthenon/package.hpp"
 #include "parthenon/parthenon.hpp"
+#include "utils/reductions.hpp"
 #include <bvals/boundary_conditions_generic.hpp>
 #include <solvers/bicgstab_solver.hpp>
 #include <solvers/solver_utils.hpp>
@@ -29,12 +32,97 @@ struct any_gravity : public parthenon::variable_names::base_t<true> {
   static std::string name() { return "gravity[.].*"; }
 };
 
+template <parthenon::CoordinateDirection DIR, BCSide SIDE, class... var_ts>
+void MultipoleGravityBC(std::shared_ptr<MeshBlockData<Real>> &rc, bool coarse,
+                        parthenon::TopologicalElement el) {
+  using namespace parthenon;
+
+  static_assert(DIR == X1DIR || DIR == X2DIR || DIR == X3DIR, "DIR must be X[123]DIR");
+  //
+  // convenient shorthands
+  constexpr bool X1 = (DIR == X1DIR);
+  constexpr bool X2 = (DIR == X2DIR);
+  constexpr bool X3 = (DIR == X3DIR);
+  constexpr bool INNER = (SIDE == BCSide::Inner);
+
+  static auto descriptors = BoundaryFunction::impl::GetPackDescriptorMap<var_ts...>(rc);
+  for (auto fine : {false, true}) {
+    auto q = descriptors[BoundaryFunction::impl::desc_key_t{coarse, fine,
+                                                            GetTopologicalType(el)}]
+                 .GetPack(rc.get());
+    const int b = 0;
+    const int lstart = q.GetLowerBoundHost(b);
+    const int lend = q.GetUpperBoundHost(b);
+    if (lend < lstart) return;
+    auto nb = IndexRange{lstart, lend};
+
+    MeshBlock *pmb = rc->GetBlockPointer();
+    const auto &bounds = fine ? (coarse ? pmb->cellbounds : pmb->f_cellbounds)
+                              : (coarse ? pmb->c_cellbounds : pmb->cellbounds);
+
+    const auto &range = X1 ? bounds.GetBoundsI(IndexDomain::interior, el)
+                           : (X2 ? bounds.GetBoundsJ(IndexDomain::interior, el)
+                                 : bounds.GetBoundsK(IndexDomain::interior, el));
+    const int ref = INNER ? range.s : range.e;
+
+    std::string label = "MultipoleGravity";
+    label += (INNER ? "Inner" : "Outer");
+    label += "X" + std::to_string(DIR);
+
+    constexpr IndexDomain domain =
+        INNER ? (X1 ? IndexDomain::inner_x1
+                    : (X2 ? IndexDomain::inner_x2 : IndexDomain::inner_x3))
+              : (X1 ? IndexDomain::outer_x1
+                    : (X2 ? IndexDomain::outer_x2 : IndexDomain::outer_x3));
+
+    // used for reflections
+    const int offset = 2 * ref + (INNER ? -1 : 1);
+
+    // Compute phi0
+    auto pkg = pmb->packages.Get("Gravity");
+    const Real gravity_g = pkg->Param<Real>("gravity_constant");
+    const auto mpcoeff =
+        pkg->Param<parthenon::AllReduce<parthenon::HostArray1D<Real>>>("mpcoeff");
+
+    pmb->par_for_bndry(
+        PARTHENON_AUTO_LABEL, nb, domain, el, coarse, fine,
+        KOKKOS_LAMBDA(const int &l, const int &k, const int &j, const int &i) {
+          const auto &coords = q.GetCoordinates(b);
+
+          const Real x = coords.template Xc<1>(i);
+          const Real y = coords.template Xc<2>(j);
+          const Real z = coords.template Xc<3>(k);
+
+          const Real r2 = x * x + y * y + z * z;
+          const Real r = sqrt(r2);
+          const Real r3 = r * r2;
+          const Real r5 = r3 * r2;
+
+          const Real phi0 =
+              mpcoeff.val(0) / r +
+              (mpcoeff.val(1) * y + mpcoeff.val(2) * z + mpcoeff.val(3) * x) / r3 +
+              (mpcoeff.val(4) * x * y + mpcoeff.val(5) * y * z +
+               mpcoeff.val(6) * (3.0 * z * z - r2) + mpcoeff.val(7) * z * x +
+               mpcoeff.val(8) * 0.5 * (x * x - y * y)) /
+                  r5;
+
+          q(b, el, l, k, j, i) = 2.0 * phi0 - q(b, el, l, X3 ? offset - k : k,
+                                                X2 ? offset - j : j, X1 ? offset - i : i);
+        });
+  }
+}
+
+template <parthenon::CoordinateDirection DIR, BCSide SIDE, class... var_ts>
+void MultipoleGravityBC(std::shared_ptr<MeshBlockData<Real>> &rc, bool coarse) {
+  using TE = parthenon::TopologicalElement;
+  for (auto el : {TE::CC, TE::F1, TE::F2, TE::F3, TE::E1, TE::E2, TE::E3, TE::NN})
+    MultipoleGravityBC<DIR, SIDE, var_ts...>(rc, coarse, el);
+}
+
 template <parthenon::CoordinateDirection DIR, BCSide SIDE>
 auto GetBC() {
   return [](std::shared_ptr<MeshBlockData<Real>> &rc, bool coarse) -> void {
-    using namespace parthenon;
-    using namespace parthenon::BoundaryFunction;
-    GenericBC<DIR, SIDE, BCType::FixedFace, any_gravity>(rc, coarse, 0.0);
+    MultipoleGravityBC<DIR, SIDE, any_gravity>(rc, coarse);
   };
 }
 
