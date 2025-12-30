@@ -27,12 +27,28 @@ void GenericBC(std::shared_ptr<MeshBlockData<Real>> &rc, bool coarse,
   constexpr bool INNER = (SIDE == BCSide::Inner);
   constexpr int REFLECT_IDX = (X1 ? IV1 : (X2 ? IV2 : IV3));
 
-  static auto descriptors =
-      parthenon::BoundaryFunction::impl::GetPackDescriptorMap<var_ts...>(rc);
+  const auto ttFlag = [el] {
+    const auto tt = GetTopologicalType(el);
+    switch (tt) {
+    case (TopologicalType::Cell):
+      return Metadata::Cell;
+    case (TopologicalType::Face):
+      return Metadata::Face;
+    case (TopologicalType::Edge):
+      return Metadata::Edge;
+    case (TopologicalType::Node):
+      return Metadata::Node;
+    default:
+      PARTHENON_FAIL("Unknown topological type")
+    }
+  }();
+
   for (auto fine : {false, true}) {
-    auto q = descriptors[parthenon::BoundaryFunction::impl::desc_key_t{
-                             coarse, fine, GetTopologicalType(el)}]
-                 .GetPack(rc.get());
+    std::vector<MetadataFlag> flags{Metadata::FillGhost, ttFlag};
+    if (fine) flags.push_back(Metadata::Fine);
+    std::set<PDOpt> opts = coarse ? std::set<PDOpt>{PDOpt::Coarse} : std::set<PDOpt>{};
+    const auto desc = MakePackDescriptor<var_ts...>(rc.get(), flags, opts);
+    auto q = desc.GetPack(rc.get());
     const int b = 0;
     const int lstart = q.GetLowerBoundHost(b);
     const int lend = q.GetUpperBoundHost(b);
