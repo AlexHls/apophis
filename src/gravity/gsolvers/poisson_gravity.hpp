@@ -370,10 +370,11 @@ TaskID PoissonGravitySolver::AddTasks(TaskList &tl, TaskID dep, Mesh *pmesh,
                  md_phi, md0);
 
   // Important, otherwise ghost cells of phi will not be updated
-  auto bnd_exchg = parthenon::AddBoundaryExchangeTasks(solve, tl, md0, pmesh->multilevel);
+  auto bnd_exchg =
+      parthenon::AddBoundaryExchangeTasks(copy_back, tl, md0, pmesh->multilevel);
 
   auto comp_grav =
-      tl.AddTask(copy_back, &PoissonGravitySolver::ComputeGravityVector, this, md0);
+      tl.AddTask(bnd_exchg, &PoissonGravitySolver::ComputeGravityVector, this, md0);
 
   return comp_grav;
 }
