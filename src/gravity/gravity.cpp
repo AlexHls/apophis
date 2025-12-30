@@ -7,11 +7,16 @@
 #include "gsolvers/monopole_gravity.hpp"
 #include "gsolvers/none_gravity.hpp"
 #include "gsolvers/poisson_gravity.hpp"
+#include "interface/metadata.hpp"
 #include "interface/state_descriptor.hpp"
 
 #include "kokkos_abstraction.hpp"
 #include "parthenon/package.hpp"
 #include "parthenon/parthenon.hpp"
+#include "parthenon_arrays.hpp"
+#include "prolong_restrict/pr_ops.hpp"
+#include "solvers/internal_prolongation.hpp"
+#include "utils/error_checking.hpp"
 #include "utils/reductions.hpp"
 #include <bvals/boundary_conditions_generic.hpp>
 #include <solvers/bicgstab_solver.hpp>
@@ -32,6 +37,7 @@ struct any_gravity : public parthenon::variable_names::base_t<true> {
   static std::string name() { return "gravity[.].*"; }
 };
 
+/*
 template <parthenon::CoordinateDirection DIR, BCSide SIDE, class... var_ts>
 void MultipoleGravityBC(std::shared_ptr<MeshBlockData<Real>> &rc, bool coarse,
                         parthenon::TopologicalElement el) {
@@ -98,13 +104,13 @@ void MultipoleGravityBC(std::shared_ptr<MeshBlockData<Real>> &rc, bool coarse,
           const Real r3 = r * r2;
           const Real r5 = r3 * r2;
 
-          const Real phi0 =
-              mpcoeff.val(0) / r +
-              (mpcoeff.val(1) * y + mpcoeff.val(2) * z + mpcoeff.val(3) * x) / r3 +
-              (mpcoeff.val(4) * x * y + mpcoeff.val(5) * y * z +
-               mpcoeff.val(6) * (3.0 * z * z - r2) + mpcoeff.val(7) * z * x +
-               mpcoeff.val(8) * 0.5 * (x * x - y * y)) /
-                  r5;
+          const Real phi0 = 0.0;
+                mpcoeff.val(0) / r +
+                (mpcoeff.val(1) * y + mpcoeff.val(2) * z + mpcoeff.val(3) * x) / r3 +
+                (mpcoeff.val(4) * x * y + mpcoeff.val(5) * y * z +
+                 mpcoeff.val(6) * (3.0 * z * z - r2) + mpcoeff.val(7) * z * x +
+                 mpcoeff.val(8) * 0.5 * (x * x - y * y)) /
+                    r5;
 
           q(b, el, l, k, j, i) = 2.0 * phi0 - q(b, el, l, X3 ? offset - k : k,
                                                 X2 ? offset - j : j, X1 ? offset - i : i);
@@ -118,11 +124,15 @@ void MultipoleGravityBC(std::shared_ptr<MeshBlockData<Real>> &rc, bool coarse) {
   for (auto el : {TE::CC, TE::F1, TE::F2, TE::F3, TE::E1, TE::E2, TE::E3, TE::NN})
     MultipoleGravityBC<DIR, SIDE, var_ts...>(rc, coarse, el);
 }
+*/
 
 template <parthenon::CoordinateDirection DIR, BCSide SIDE>
 auto GetBC() {
   return [](std::shared_ptr<MeshBlockData<Real>> &rc, bool coarse) -> void {
-    MultipoleGravityBC<DIR, SIDE, any_gravity>(rc, coarse);
+    using namespace parthenon;
+    using namespace parthenon::BoundaryFunction;
+    GenericBC<DIR, SIDE, BCType::FixedFace, any_gravity>(rc, coarse, 0.0);
+    // MultipoleGravityBC<DIR, SIDE, any_gravity>(rc, coarse);
   };
 }
 
@@ -198,33 +208,53 @@ std::shared_ptr<parthenon::StateDescriptor> InitializeGravity(ParameterInput *pi
     std::string solver = pin->GetOrAddString("gravity", "solver", "MG");
     pkg->AddParam<>("solver", solver);
 
-    bool flux_correct = pin->GetOrAddBoolean("gravity", "flux_correct", false);
-    pkg->AddParam<>("flux_correct", flux_correct);
+    std::string prolong =
+        pin->GetOrAddString("gravity", "boundary_prolongation", "Linear");
 
     Real err_tol = pin->GetOrAddReal("gravity", "err_tol", 1.0e-8);
     pkg->AddParam<>("err_tol", err_tol);
 
-    PoissonEquation eq;
-    eq.do_flux_cor = flux_correct;
+    using PoissEq = PoissonEquation<phi, D>;
+    PoissEq eq(pin, "gravity");
+    pkg->AddParam<>("poisson_equation", eq, parthenon::Params::Mutability::Mutable);
 
-    parthenon::solvers::MGParams mg_params(pin, "gravity/solver_params");
-    parthenon::solvers::MGSolver<phi, rhs, PoissonEquation> mg_solver(pkg.get(),
-                                                                      mg_params, eq);
-    pkg->AddParam<>("MGsolver", mg_solver, parthenon::Params::Mutability::Mutable);
+    std::shared_ptr<parthenon::solvers::SolverBase> psolver;
+    using prolongator_t = parthenon::solvers::ProlongationBlockInteriorZeroDirichlet;
+    using preconditioner_t = parthenon::solvers::MGSolver<PoissEq, prolongator_t>;
 
-    parthenon::solvers::BiCGSTABParams bicgstab_params(pin, "gravity/solver_params");
-    parthenon::solvers::BiCGSTABSolver<phi, rhs, PoissonEquation> bicg_solver(
-        pkg.get(), bicgstab_params, eq);
-    pkg->AddParam<>("MGBiCGSTABsolver", bicg_solver,
-                    parthenon::Params::Mutability::Mutable);
+    if (solver == "MG") {
+      psolver = std::make_shared<parthenon::solvers::MGSolver<PoissEq, prolongator_t>>(
+          "base", "phi", "rhs", pin, "gravity/solver_params", PoissEq(pin, "gravity"));
+    } else if (solver == "MGBiCGSTAB") {
+      psolver =
+          std::make_shared<parthenon::solvers::BiCGSTABSolver<PoissEq, preconditioner_t>>(
+              "base", "phi", "rhs", pin, "gravity/solver_params",
+              PoissEq(pin, "gravity"));
+    } else {
+      PARTHENON_FAIL("Unknown solver type " + solver + ".");
+    }
+    pkg->AddParam("solver_pointer", psolver);
 
     // Add fields needed for the Poisson solver
     using namespace parthenon::refinement_ops;
+    auto mD = parthenon::Metadata(
+        {parthenon::Metadata::Independent, parthenon::Metadata::OneCopy,
+         parthenon::Metadata::Face, parthenon::Metadata::GMGRestrict});
+    mD.RegisterRefinementOps<ProlongateSharedLinear, RestrictAverage>();
+    pkg->AddField(D::name(), mD);
+
     auto mflux_comm = parthenon::Metadata(
         {parthenon::Metadata::Cell, parthenon::Metadata::Independent,
          parthenon::Metadata::FillGhost, parthenon::Metadata::WithFluxes,
-         parthenon::Metadata::GMGRestrict});
-    mflux_comm.RegisterRefinementOps<ProlongateSharedLinear, RestrictAverage>();
+         parthenon::Metadata::GMGRestrict, parthenon::Metadata::GMGProlongate});
+
+    if (prolong == "Linear") {
+      mflux_comm.RegisterRefinementOps<ProlongateSharedLinear, RestrictAverage>();
+    } else if (prolong == "Constant") {
+      mflux_comm.RegisterRefinementOps<ProlongatePiecewiseConstant, RestrictAverage>();
+    } else {
+      PARTHENON_FAIL("Unknown proongation method for gravity boundaries.");
+    }
     pkg->AddField(phi::name(), mflux_comm);
 
     auto m_no_ghost =
