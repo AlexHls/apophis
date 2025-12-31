@@ -3,6 +3,7 @@
 
 #include "../gravity.hpp"
 #include "basic_types.hpp"
+#include "pack/make_pack_descriptor.hpp"
 #include "solvers/bicgstab_solver.hpp"
 #include "solvers/mg_solver.hpp"
 #include "solvers/solver_base.hpp"
@@ -196,6 +197,10 @@ struct PoissonEquation {
     const std::size_t scratch_size_in_bytes = 0;
     const std::size_t scratch_level = 1;
 
+    auto pkg = md->GetMeshPointer()->packages.Get("Gravity");
+    const auto mpcoeff =
+        pkg->Param<parthenon::AllReduce<parthenon::HostArray1D<Real>>>("mpcoeff");
+
     const parthenon::Indexer3D idxers[6]{
         parthenon::Indexer3D(kb, jb, {ib.s, ib.s}),
         parthenon::Indexer3D(kb, jb, {ib.e + 1, ib.e + 1}),
@@ -225,15 +230,44 @@ struct PoissonEquation {
               const int joff = x2off[face] > 0 ? -1 : 0;
               const int ioff = x1off[face] > 0 ? -1 : 0;
               const int sign = x1off[face] + x2off[face] + x3off[face];
-              parthenon::par_for_inner(DEFAULT_INNER_LOOP_PATTERN, member, 0,
-                                       idxer.size() - 1, [&](const int idx) {
-                                         const auto [k, j, i] = idxer(idx);
-                                         pack.flux(b, dir, var_t(), k, j, i) =
-                                             sign * pack_mat(b, te, D_t(), k, j, i) *
-                                             pack(b, var_t(), k + koff, j + joff,
-                                                  i + ioff) /
-                                             (0.5 * coords.Dxc(dir, k, j, i));
-                                       });
+              parthenon::par_for_inner(
+                  DEFAULT_INNER_LOOP_PATTERN, member, 0, idxer.size() - 1,
+                  [&](const int idx) {
+                    const auto [k, j, i] = idxer(idx);
+                    Real x, y, z;
+
+                    if (te == TE::F1) {
+                      x = coords.template Xf<X1DIR>(k, j, i);
+                      y = coords.template Xc<2>(j);
+                      z = coords.template Xc<3>(k);
+                    } else if (te == TE::F2) {
+                      x = coords.template Xc<1>(i);
+                      y = coords.template Xf<X2DIR>(k, j, i);
+                      z = coords.template Xc<3>(k);
+                    } else { // TE::F3
+                      x = coords.template Xc<1>(i);
+                      y = coords.template Xc<2>(j);
+                      z = coords.template Xf<X3DIR>(k, j, i);
+                    }
+
+                    const Real r2 = x * x + y * y + z * z;
+                    const Real r = sqrt(r2);
+                    const Real r3 = r * r2;
+                    const Real r5 = r3 * r2;
+
+                    const Real phi0 =
+                        mpcoeff.val(0) / r +
+                        (mpcoeff.val(1) * y + mpcoeff.val(2) * z + mpcoeff.val(3) * x) /
+                            r3 +
+                        (mpcoeff.val(4) * x * y + mpcoeff.val(5) * y * z +
+                         mpcoeff.val(6) * (3.0 * z * z - r2) + mpcoeff.val(7) * z * x +
+                         mpcoeff.val(8) * 0.5 * (x * x - y * y)) /
+                            r5;
+                    pack.flux(b, dir, var_t(), k, j, i) =
+                        sign * pack_mat(b, te, D_t(), k, j, i) *
+                        (pack(b, var_t(), k + koff, j + joff, i + ioff) - phi0) /
+                        (0.5 * coords.Dxc(dir, k, j, i));
+                  });
             }
             // Correct for size of neighboring zone at fine-coarse boundary when using
             // constant prolongation
@@ -491,7 +525,7 @@ TaskStatus PoissonGravitySolver::ComputeRhs(std::shared_ptr<MeshData<Real>> &md)
         pack(b, te, rhs(), k, j, i) = four_pi_g * prim(IDN, k, j, i);
 
         // Init D to 1.0 for standard PoissonEquation
-        // TODO Move thsi somewhere else to avoid recomputation
+        // TODO Move this somewhere else to avoid recomputation
         pack(b, TE::F1, D(), k, j, i) = 1.0;
         pack(b, TE::F2, D(), k, j, i) = 1.0;
         pack(b, TE::F3, D(), k, j, i) = 1.0;
