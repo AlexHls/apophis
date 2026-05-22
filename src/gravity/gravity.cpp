@@ -19,6 +19,7 @@
 #include "utils/error_checking.hpp"
 #include "utils/reductions.hpp"
 #include <bvals/boundary_conditions_generic.hpp>
+#include <mpi.h>
 #include <solvers/bicgstab_solver.hpp>
 #include <solvers/solver_utils.hpp>
 
@@ -29,13 +30,6 @@ using parthenon::X2DIR;
 using parthenon::X3DIR;
 
 namespace Apophis {
-
-struct any_gravity : public parthenon::variable_names::base_t<true> {
-  template <class... Ts>
-  KOKKOS_INLINE_FUNCTION any_gravity(Ts &&...args)
-      : base_t<true>(std::forward<Ts>(args)...) {}
-  static std::string name() { return "gravity[.].*"; }
-};
 
 template <parthenon::CoordinateDirection DIR, BCSide SIDE, class... var_ts>
 void MultipoleGravityBC(std::shared_ptr<MeshBlockData<Real>> &rc, bool coarse,
@@ -102,7 +96,6 @@ void MultipoleGravityBC(std::shared_ptr<MeshBlockData<Real>> &rc, bool coarse,
 
     // Compute phi0
     auto pkg = pmb->packages.Get("Gravity");
-    const Real gravity_g = pkg->Param<Real>("gravity_constant");
     const auto mpcoeff =
         pkg->Param<parthenon::AllReduce<parthenon::HostArray1D<Real>>>("mpcoeff");
 
@@ -116,18 +109,7 @@ void MultipoleGravityBC(std::shared_ptr<MeshBlockData<Real>> &rc, bool coarse,
           const Real y = X2 ? coords.template Xf<2>(face_i) : coords.template Xc<2>(j);
           const Real z = X3 ? coords.template Xf<3>(face_i) : coords.template Xc<3>(k);
 
-          const Real r2 = x * x + y * y + z * z;
-          const Real r = sqrt(r2);
-          const Real r3 = r * r2;
-          const Real r5 = r3 * r2;
-
-          const Real phi0 =
-              mpcoeff.val(0) / r +
-              (mpcoeff.val(1) * y + mpcoeff.val(2) * z + mpcoeff.val(3) * x) / r3 +
-              (mpcoeff.val(4) * x * y + mpcoeff.val(5) * y * z +
-               mpcoeff.val(6) * (3.0 * z * z - r2) + mpcoeff.val(7) * z * x +
-               mpcoeff.val(8) * 0.5 * (x * x - y * y)) /
-                  r5;
+          const Real phi0 = MultipolePotential(mpcoeff.val, x, y, z);
 
           q(b, el, l, k, j, i) = 2.0 * phi0 - q(b, el, l, X3 ? offset - k : k,
                                                 X2 ? offset - j : j, X1 ? offset - i : i);
