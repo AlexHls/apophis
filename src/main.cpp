@@ -41,6 +41,8 @@ int main(int argc, char *argv[]) {
     pman.app_input->PostInitialization = rt::PostInitialization;
   } else if (problem == "evrards_collapse") {
     pman.app_input->ProblemGenerator = ec::ProblemGenerator;
+  } else if (problem == "gravity_test") {
+    pman.app_input->ProblemGenerator = grav_test::ProblemGenerator;
   } else if (problem == "unset") {
     PARTHENON_FAIL("[Apophis]: Problem unset. Exiting.");
   } else {

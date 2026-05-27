@@ -48,4 +48,10 @@ using namespace parthenon::driver::prelude;
 
 void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin);
 } // namespace ec
+
+namespace grav_test {
+using namespace parthenon::driver::prelude;
+
+void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin);
+} // namespace grav_test
 #endif // PGEN_PGEN_HPP_
