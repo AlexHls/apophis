@@ -3,6 +3,13 @@
 
 #include "../gravity.hpp"
 #include "basic_types.hpp"
+#include "bvals/boundary_conditions_generic.hpp"
+#include "defs.hpp"
+#include "interface/mesh_data.hpp"
+#include "interface/meshblock_data.hpp"
+#include "kokkos_types.hpp"
+#include "mesh/mesh.hpp"
+#include "mesh/meshblock.hpp"
 #include "pack/make_pack_descriptor.hpp"
 #include "solvers/bicgstab_solver.hpp"
 #include "solvers/mg_solver.hpp"
@@ -10,6 +17,7 @@
 #include "solvers/solver_utils.hpp"
 
 #include "../../main.hpp"
+#include "utils/reductions.hpp"
 #include "utils/type_list.hpp"
 #include <memory>
 
@@ -35,6 +43,41 @@ struct PoissonEquation {
     include_flux_dx =
         (pin->GetOrAddString(label, "boundary_prolongation", "Linear") == "Constant");
   }
+
+  static TaskStatus SetBoundary(std::shared_ptr<parthenon::MeshData<Real>> &md,
+                                bool coarse) {
+    for (int b = 0; b < md->NumBlocks(); b++) {
+      SetZeroDirichletBoundary(md->GetBlockData(b), coarse);
+    }
+    return TaskStatus::complete;
+  }
+
+  static void
+  SetZeroDirichletBoundary(std::shared_ptr<parthenon::MeshBlockData<Real>> &rc,
+                           bool coarse) {
+    using namespace parthenon;
+    using namespace parthenon::BoundaryFunction;
+    auto *pmb = rc->GetBlockPointer();
+    const int ndim = pmb->pmy_mesh->ndim;
+    auto is_physical = [pmb](BoundaryFace face) {
+      const auto flag = pmb->boundary_flag[static_cast<int>(face)];
+      return flag != BoundaryFlag::block && flag != BoundaryFlag::undef &&
+             flag != BoundaryFlag::periodic;
+    };
+
+    if (is_physical(BoundaryFace::inner_x1))
+      GenericBC<X1DIR, BCSide::Inner, BCType::FixedFace, any_gravity>(rc, coarse, 0.0);
+    if (is_physical(BoundaryFace::outer_x1))
+      GenericBC<X1DIR, BCSide::Outer, BCType::FixedFace, any_gravity>(rc, coarse, 0.0);
+    if (ndim > 1 && is_physical(BoundaryFace::inner_x2))
+      GenericBC<X2DIR, BCSide::Inner, BCType::FixedFace, any_gravity>(rc, coarse, 0.0);
+    if (ndim > 1 && is_physical(BoundaryFace::outer_x2))
+      GenericBC<X2DIR, BCSide::Outer, BCType::FixedFace, any_gravity>(rc, coarse, 0.0);
+    if (ndim > 2 && is_physical(BoundaryFace::inner_x3))
+      GenericBC<X3DIR, BCSide::Inner, BCType::FixedFace, any_gravity>(rc, coarse, 0.0);
+    if (ndim > 2 && is_physical(BoundaryFace::outer_x3))
+      GenericBC<X3DIR, BCSide::Outer, BCType::FixedFace, any_gravity>(rc, coarse, 0.0);
+  };
 
   TaskID Ax(parthenon::TaskList &tl, parthenon::TaskID depends_on,
             std::shared_ptr<parthenon::MeshData<Real>> &md_mat,
@@ -376,7 +419,7 @@ TaskID PoissonGravitySolver::AddTasks(TaskList &tl, TaskID dep, Mesh *pmesh,
       md_phi, md0);
 
   auto comp_grav =
-      tl.AddTask(bnd_exchg, &PoissonGravitySolver::ComputeGravityVector, this, md0);
+      tl.AddTask(copy_back, &PoissonGravitySolver::ComputeGravityVector, this, md0);
 
   return comp_grav;
 }
@@ -395,7 +438,7 @@ TaskStatus PoissonGravitySolver::ComputeMPCoeff(std::shared_ptr<MeshData<Real>> 
       pkg->MutableParam<AllReduce<parthenon::HostArray1D<Real>>>("mpcoeff");
 
   // Reset to zero
-  for (int n = 0; n < 10; n++) {
+  for (int n = 0; n < 9; n++) {
     mpcoeff->val(n) = 0.0;
   }
 
@@ -445,10 +488,10 @@ TaskStatus PoissonGravitySolver::ScaleMPCoeff(std::shared_ptr<MeshData<Real>> &m
   const Real gravity_g = pkg->Param<Real>("gravity_constant");
 
   // constants for multipole expansion
-  constexpr Real c0 = -0.25 / M_PI;
-  constexpr Real c1 = -0.25 / M_PI;
-  constexpr Real c2 = -0.0625 / M_PI;
-  constexpr Real c2a = -0.75 / M_PI;
+  constexpr Real c0 = -1.0;
+  constexpr Real c1 = -1.0;
+  constexpr Real c2 = -0.25;
+  constexpr Real c2a = -3.0;
 
   mpcoeff->val(0) *= c0 * gravity_g;
   mpcoeff->val(1) *= c1 * gravity_g;
@@ -467,9 +510,13 @@ TaskStatus PoissonGravitySolver::ComputeRhs(std::shared_ptr<MeshData<Real>> &md)
   using namespace parthenon;
   using TE = parthenon::TopologicalElement;
   TE te = TE::CC;
-  IndexRange ib = md->GetBoundsI(IndexDomain::entire, te);
-  IndexRange jb = md->GetBoundsJ(IndexDomain::entire, te);
-  IndexRange kb = md->GetBoundsK(IndexDomain::entire, te);
+  IndexRange eib = md->GetBoundsI(IndexDomain::entire, te);
+  IndexRange ejb = md->GetBoundsJ(IndexDomain::entire, te);
+  IndexRange ekb = md->GetBoundsK(IndexDomain::entire, te);
+  IndexRange ib = md->GetBoundsI(IndexDomain::interior, te);
+  IndexRange jb = md->GetBoundsJ(IndexDomain::interior, te);
+  IndexRange kb = md->GetBoundsK(IndexDomain::interior, te);
+  const int ndim = md->GetMeshPointer()->ndim;
 
   auto pkg = md->GetMeshPointer()->packages.Get("Gravity");
 
@@ -484,15 +531,67 @@ TaskStatus PoissonGravitySolver::ComputeRhs(std::shared_ptr<MeshData<Real>> &md)
 
   const Real gravity_g = pkg->Param<Real>("gravity_constant");
   const Real four_pi_g = 4.0 * M_PI * gravity_g;
+  const auto mpcoeff =
+      pkg->Param<parthenon::AllReduce<parthenon::HostArray1D<Real>>>("mpcoeff");
 
   parthenon::par_for(
-      "BuildRhs", 0, prim_pack.GetDim(5) - 1, kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
+      "BuildRhs", 0, prim_pack.GetDim(5) - 1, ekb.s, ekb.e, ejb.s, ejb.e, eib.s, eib.e,
       KOKKOS_LAMBDA(const int b, const int k, const int j, const int i) {
         const auto &prim = prim_pack(b);
+        const auto &coords = pack.GetCoordinates(b);
 
-        pack(b, te, rhs(), k, j, i) = four_pi_g * prim(IDN, k, j, i);
+        Real rhs_val = four_pi_g * prim(IDN, k, j, i);
         // TODO Implement Jeans' Swindle
-        // pack(b, te, rhs(), k, j, i) -= four_pi_g * rho_bkg;
+        // rhs_val -= four_pi_g * rho_bkg;
+        const bool interior =
+            (i >= ib.s && i <= ib.e && j >= jb.s && j <= jb.e && k >= kb.s && k <= kb.e);
+        if (interior) {
+          const Real volume = coords.template Volume<TE::CC>(k, j, i);
+          if (i == ib.s && pack.IsPhysicalBoundary(b, 0, 0, -1)) {
+            const Real phi_b =
+                MultipolePotential(mpcoeff.val, coords.template Xf<1>(i),
+                                   coords.template Xc<2>(j), coords.template Xc<3>(k));
+            rhs_val -= 2.0 * phi_b * coords.template Volume<TE::F1>(k, j, i) /
+                       (coords.template Dxc<X1DIR>(k, j, i) * volume);
+          }
+          if (i == ib.e && pack.IsPhysicalBoundary(b, 0, 0, 1)) {
+            const Real phi_b =
+                MultipolePotential(mpcoeff.val, coords.template Xf<1>(i + 1),
+                                   coords.template Xc<2>(j), coords.template Xc<3>(k));
+            rhs_val -= 2.0 * phi_b * coords.template Volume<TE::F1>(k, j, i + 1) /
+                       (coords.template Dxc<X1DIR>(k, j, i + 1) * volume);
+          }
+          if (ndim > 1 && j == jb.s && pack.IsPhysicalBoundary(b, 0, -1, 0)) {
+            const Real phi_b =
+                MultipolePotential(mpcoeff.val, coords.template Xc<1>(i),
+                                   coords.template Xf<2>(j), coords.template Xc<3>(k));
+            rhs_val -= 2.0 * phi_b * coords.template Volume<TE::F2>(k, j, i) /
+                       (coords.template Dxc<X2DIR>(k, j, i) * volume);
+          }
+          if (ndim > 1 && j == jb.e && pack.IsPhysicalBoundary(b, 0, 1, 0)) {
+            const Real phi_b = MultipolePotential(mpcoeff.val, coords.template Xc<1>(i),
+                                                  coords.template Xf<2>(j + 1),
+                                                  coords.template Xc<3>(k));
+            rhs_val -= 2.0 * phi_b * coords.template Volume<TE::F2>(k, j + 1, i) /
+                       (coords.template Dxc<X2DIR>(k, j + 1, i) * volume);
+          }
+          if (ndim > 2 && k == kb.s && pack.IsPhysicalBoundary(b, -1, 0, 0)) {
+            const Real phi_b =
+                MultipolePotential(mpcoeff.val, coords.template Xc<1>(i),
+                                   coords.template Xc<2>(j), coords.template Xf<3>(k));
+            rhs_val -= 2.0 * phi_b * coords.template Volume<TE::F3>(k, j, i) /
+                       (coords.template Dxc<X3DIR>(k, j, i) * volume);
+          }
+          if (ndim > 2 && k == kb.e && pack.IsPhysicalBoundary(b, 1, 0, 0)) {
+            const Real phi_b = MultipolePotential(mpcoeff.val, coords.template Xc<1>(i),
+                                                  coords.template Xc<2>(j),
+                                                  coords.template Xf<3>(k + 1));
+            rhs_val -= 2.0 * phi_b * coords.template Volume<TE::F3>(k + 1, j, i) /
+                       (coords.template Dxc<X3DIR>(k + 1, j, i) * volume);
+          }
+        }
+
+        pack(b, te, rhs(), k, j, i) = rhs_val;
 
         // Init D to 1.0 for standard PoissonEquation
         // TODO Move this somewhere else to avoid recomputation
@@ -514,9 +613,6 @@ PoissonGravitySolver::ComputeGravityVector(std::shared_ptr<MeshData<Real>> &md) 
   auto ib = cellbounds.GetBoundsI(IndexDomain::interior);
   auto jb = cellbounds.GetBoundsJ(IndexDomain::interior);
   auto kb = cellbounds.GetBoundsK(IndexDomain::interior);
-
-  auto pkg = pmb->packages.Get("Gravity");
-  const auto gravity_g = pkg->Param<Real>("gravity_constant");
 
   const int ndim = pmb->pmy_mesh->ndim;
 

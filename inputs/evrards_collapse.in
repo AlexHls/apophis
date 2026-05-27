@@ -36,7 +36,7 @@ nx3=1
 <parthenon/time>
 integrator = rk2
 cfl = 0.4
-tlim = 1.6
+tlim = 0.8
 nlim = 10000
 perf_cycle_offset = 2 # number of inital cycles not to be included in perf calc
 ncycle_out_mesh = -100
