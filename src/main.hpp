@@ -38,6 +38,7 @@ enum class Reconstruction {
 
 enum class RiemannSolver {
   undefined,
+  none,
   hlle,
   hllc,
   lhllc,

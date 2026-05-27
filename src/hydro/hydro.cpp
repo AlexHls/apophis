@@ -9,11 +9,13 @@
 #include "rsolvers/hydro_hllc.hpp"
 #include "rsolvers/hydro_hlle.hpp"
 #include "rsolvers/hydro_lhllc.hpp"
+#include "rsolvers/hydro_none.hpp"
 
 #include "basic_types.hpp"
 #include "interface/state_descriptor.hpp"
 #include "kokkos_abstraction.hpp"
 #include "parthenon/parthenon.hpp"
+#include "utils/error_checking.hpp"
 #include "utils/instrument.hpp"
 #include <array>
 #include <memory>
@@ -84,6 +86,11 @@ std::shared_ptr<parthenon::StateDescriptor> InitializeHydro(ParameterInput *pin)
     riemann = RiemannSolver::hlle;
   } else if (riemann_str == "lhllc") {
     riemann = RiemannSolver::lhllc;
+  } else if (riemann_str == "none") {
+    if (recon_str != "dc")
+      PARTHENON_FAIL(
+          "[Apophis]: 'none' Riemann solver only works with dc reconstruction. Exiting.");
+    riemann = RiemannSolver::none;
   } else {
     PARTHENON_FAIL("[Apophis]: Riemann solver not recognized. Exiting.");
   }
@@ -102,6 +109,7 @@ std::shared_ptr<parthenon::StateDescriptor> InitializeHydro(ParameterInput *pin)
   add_flux_fun<Fluid::euler, Reconstruction::dc, RiemannSolver::lhllc>(flux_functions);
   add_flux_fun<Fluid::euler, Reconstruction::plm, RiemannSolver::lhllc>(flux_functions);
   add_flux_fun<Fluid::euler, Reconstruction::ppm, RiemannSolver::lhllc>(flux_functions);
+  add_flux_fun<Fluid::euler, Reconstruction::dc, RiemannSolver::none>(flux_functions);
 
   FluxFun_t *flux_other_stage = nullptr;
   flux_other_stage = flux_functions.at(std::make_tuple(fluid, recon, riemann));
