@@ -22,3 +22,6 @@ setup_test_both("convergence" "--driver ${PROJECT_BINARY_DIR}/bin/apophis \
 
 setup_test_both("gravity" "--driver ${PROJECT_BINARY_DIR}/bin/apophis \
   --driver_input ${PROJECT_SOURCE_DIR}/inputs/grav_test.in --num_steps 8" "gravity")
+
+setup_test_both("evrards_collapse" "--driver ${PROJECT_BINARY_DIR}/bin/apophis \
+  --driver_input ${PROJECT_SOURCE_DIR}/inputs/evrards_collapse.in --num_steps 4" "gravity")

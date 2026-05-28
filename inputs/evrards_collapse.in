@@ -5,33 +5,42 @@ problem = Evrards collapse test
 problem_id = evrards_collapse
 
 <parthenon/mesh>
-refinement = none 
+refinement = static 
 multigrid = true
 numlevel = 3
 nghost = 2
 
-nx1 = 128
-x1min = -2.0
-x1max = 2.0
+nx1 = 32
+x1min = -1.0
+x1max = 1.0
 ix1_bc = outflow
 ox1_bc = outflow
 
-nx2 = 128
-x2min = -2.0
-x2max = 2.0
+nx2 = 32
+x2min = -1.0
+x2max = 1.0
 ix2_bc = outflow
 ox2_bc = outflow
 
-nx3 = 1
-x3min = -2.0
-x3max = 2.0
+nx3 = 32
+x3min = -1.0
+x3max = 1.0
 ix3_bc = outflow
 ox3_bc = outflow
 
 <parthenon/meshblock>
 nx1=16
 nx2=16
-nx3=1
+nx3=16
+
+<parthenon/static_refinement1>
+x1min = -0.5
+x1max = 0.5
+x2min = -0.5
+x2max = 0.5
+x3min = -0.5
+x3max = 0.5
+level = 2
 
 <parthenon/time>
 integrator = rk2
@@ -80,7 +89,7 @@ do_FAS = true
 
 <parthenon/output0>
 file_type = hdf5
-dt = 0.1
+dt = 0.2
 variables = cons,prim,gravity
 
 <parthenon/output1>
