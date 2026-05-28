@@ -12,7 +12,8 @@ using parthenon::Real;
 using parthenon::ScratchPad2D;
 
 KOKKOS_INLINE_FUNCTION
-void PLM(const Real &q_im1, const Real &q_i, const Real &q_ip1, Real &ql_ip1, Real &qr_i) {
+void PLM(const Real &q_im1, const Real &q_i, const Real &q_ip1, Real &ql_ip1,
+         Real &qr_i) {
   // L/R slopes
   Real dql = (q_i - q_im1);
   Real dqr = (q_ip1 - q_i);
@@ -46,7 +47,6 @@ Reconstruct(parthenon::team_mbr_t const &member, const int k, const int j, const
       }
     });
   }
-
 }
 
 #endif // RECON_PLM_SIMPLE_HPP_

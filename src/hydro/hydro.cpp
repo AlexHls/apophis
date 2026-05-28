@@ -4,14 +4,21 @@
 #include "../recon/plm_simple.hpp"
 #include "../recon/ppm_simple.hpp"
 #include "../refinement/refinement.hpp"
+#include "Kokkos_Macros.hpp"
+#include "outputs/outputs.hpp"
 #include "rsolvers/hydro_hllc.hpp"
 #include "rsolvers/hydro_hlle.hpp"
 #include "rsolvers/hydro_lhllc.hpp"
+#include "rsolvers/hydro_none.hpp"
 
 #include "basic_types.hpp"
 #include "interface/state_descriptor.hpp"
 #include "kokkos_abstraction.hpp"
 #include "parthenon/parthenon.hpp"
+#include "utils/error_checking.hpp"
+#include "utils/instrument.hpp"
+#include <array>
+#include <memory>
 #include <parthenon/package.hpp>
 
 using parthenon::DevExecSpace;
@@ -23,8 +30,7 @@ using namespace parthenon::driver::prelude;
 
 namespace Apophis {
 
-std::shared_ptr<parthenon::StateDescriptor>
-InitializeHydro(ParameterInput *pin) {
+std::shared_ptr<parthenon::StateDescriptor> InitializeHydro(ParameterInput *pin) {
   auto pkg = std::make_shared<parthenon::StateDescriptor>("Hydro");
   Real cfl = pin->GetOrAddReal("parthenon/time", "cfl", 0.3);
 
@@ -65,8 +71,7 @@ InitializeHydro(ParameterInput *pin) {
 
   const auto nghost = pin->GetInteger("parthenon/mesh", "nghost");
   if (nghost < recon_need_ghost) {
-    PARTHENON_FAIL(
-        "[Apophis]: Not enough ghost zones for reconstruction. Exiting.");
+    PARTHENON_FAIL("[Apophis]: Not enough ghost zones for reconstruction. Exiting.");
   }
 
   pkg->AddParam<>("reconstruction", recon);
@@ -81,6 +86,11 @@ InitializeHydro(ParameterInput *pin) {
     riemann = RiemannSolver::hlle;
   } else if (riemann_str == "lhllc") {
     riemann = RiemannSolver::lhllc;
+  } else if (riemann_str == "none") {
+    if (recon_str != "dc")
+      PARTHENON_FAIL(
+          "[Apophis]: 'none' Riemann solver only works with dc reconstruction. Exiting.");
+    riemann = RiemannSolver::none;
   } else {
     PARTHENON_FAIL("[Apophis]: Riemann solver not recognized. Exiting.");
   }
@@ -90,24 +100,16 @@ InitializeHydro(ParameterInput *pin) {
   // Add flux functions
   std::map<std::tuple<Fluid, Reconstruction, RiemannSolver>, FluxFun_t *>
       flux_functions{};
-  add_flux_fun<Fluid::euler, Reconstruction::dc, RiemannSolver::hllc>(
-      flux_functions);
-  add_flux_fun<Fluid::euler, Reconstruction::plm, RiemannSolver::hllc>(
-      flux_functions);
-  add_flux_fun<Fluid::euler, Reconstruction::ppm, RiemannSolver::hllc>(
-      flux_functions);
-  add_flux_fun<Fluid::euler, Reconstruction::dc, RiemannSolver::hlle>(
-      flux_functions);
-  add_flux_fun<Fluid::euler, Reconstruction::plm, RiemannSolver::hlle>(
-      flux_functions);
-  add_flux_fun<Fluid::euler, Reconstruction::ppm, RiemannSolver::hlle>(
-      flux_functions);
-  add_flux_fun<Fluid::euler, Reconstruction::dc, RiemannSolver::lhllc>(
-      flux_functions);
-  add_flux_fun<Fluid::euler, Reconstruction::plm, RiemannSolver::lhllc>(
-      flux_functions);
-  add_flux_fun<Fluid::euler, Reconstruction::ppm, RiemannSolver::lhllc>(
-      flux_functions);
+  add_flux_fun<Fluid::euler, Reconstruction::dc, RiemannSolver::hllc>(flux_functions);
+  add_flux_fun<Fluid::euler, Reconstruction::plm, RiemannSolver::hllc>(flux_functions);
+  add_flux_fun<Fluid::euler, Reconstruction::ppm, RiemannSolver::hllc>(flux_functions);
+  add_flux_fun<Fluid::euler, Reconstruction::dc, RiemannSolver::hlle>(flux_functions);
+  add_flux_fun<Fluid::euler, Reconstruction::plm, RiemannSolver::hlle>(flux_functions);
+  add_flux_fun<Fluid::euler, Reconstruction::ppm, RiemannSolver::hlle>(flux_functions);
+  add_flux_fun<Fluid::euler, Reconstruction::dc, RiemannSolver::lhllc>(flux_functions);
+  add_flux_fun<Fluid::euler, Reconstruction::plm, RiemannSolver::lhllc>(flux_functions);
+  add_flux_fun<Fluid::euler, Reconstruction::ppm, RiemannSolver::lhllc>(flux_functions);
+  add_flux_fun<Fluid::euler, Reconstruction::dc, RiemannSolver::none>(flux_functions);
 
   FluxFun_t *flux_other_stage = nullptr;
   flux_other_stage = flux_functions.at(std::make_tuple(fluid, recon, riemann));
@@ -167,8 +169,7 @@ InitializeHydro(ParameterInput *pin) {
   // Levelset
   auto nlset = pin->GetOrAddInteger("hydro", "nlset", 0);
   if (nlset > 0 && ncomp < 1) {
-    PARTHENON_FAIL(
-        "[Apophis]: Levelset is enabled but no composition is set. Exiting.");
+    PARTHENON_FAIL("[Apophis]: Levelset is enabled but no composition is set. Exiting.");
   }
   nscalars += nlset * 2;
   pkg->AddParam<int>("nlset", nlset);
@@ -195,10 +196,9 @@ InitializeHydro(ParameterInput *pin) {
       cons_labels.push_back("scalar_density_xfuel" + std::to_string(i));
     }
   }
-  parthenon::Metadata m(
-      {parthenon::Metadata::Cell, parthenon::Metadata::Independent,
-       parthenon::Metadata::FillGhost, parthenon::Metadata::WithFluxes},
-      std::vector<int>({NHYDRO + nscalars}), cons_labels);
+  parthenon::Metadata m({parthenon::Metadata::Cell, parthenon::Metadata::Independent,
+                         parthenon::Metadata::FillGhost, parthenon::Metadata::WithFluxes},
+                        std::vector<int>({NHYDRO + nscalars}), cons_labels);
   pkg->AddField(field_name, m);
 
   field_name = "prim";
@@ -220,9 +220,8 @@ InitializeHydro(ParameterInput *pin) {
       prim_labels.push_back("scalar_xfuel" + std::to_string(i));
     }
   }
-  m = parthenon::Metadata(
-      {parthenon::Metadata::Cell, parthenon::Metadata::Derived},
-      std::vector<int>({NHYDRO + nscalars}), prim_labels);
+  m = parthenon::Metadata({parthenon::Metadata::Cell, parthenon::Metadata::Derived},
+                          std::vector<int>({NHYDRO + nscalars}), prim_labels);
   pkg->AddField(field_name, m);
 
   if (nlset > 0) {
@@ -231,10 +230,10 @@ InitializeHydro(ParameterInput *pin) {
       std::vector<std::string> lset_labels(2);
       lset_labels[LIFL] = "fuel";
       lset_labels[LIDST] = "dist";
-      m = parthenon::Metadata(
-          {parthenon::Metadata::Cell, parthenon::Metadata::Derived,
-           parthenon::Metadata::Intensive, parthenon::Metadata::FillGhost},
-          std::vector<int>({2}), lset_labels);
+      m = parthenon::Metadata({parthenon::Metadata::Cell, parthenon::Metadata::Derived,
+                               parthenon::Metadata::Intensive,
+                               parthenon::Metadata::FillGhost},
+                              std::vector<int>({2}), lset_labels);
       pkg->AddField(field_name, m);
     }
   }
@@ -244,8 +243,7 @@ InitializeHydro(ParameterInput *pin) {
   eos_lambda_labels[0] = "Abar";
   eos_lambda_labels[1] = "Zbar";
   eos_lambda_labels[2] = "lT";
-  m = parthenon::Metadata({parthenon::Metadata::Cell,
-                           parthenon::Metadata::Derived,
+  m = parthenon::Metadata({parthenon::Metadata::Cell, parthenon::Metadata::Derived,
                            parthenon::Metadata::Intensive},
                           std::vector<int>({3}), eos_lambda_labels);
   pkg->AddField(field_name, m);
@@ -254,9 +252,8 @@ InitializeHydro(ParameterInput *pin) {
   std::vector<std::string> gamma_labels(2);
   gamma_labels[0] = "gamma_c";
   gamma_labels[1] = "gamma_e";
-  m = parthenon::Metadata(
-      {parthenon::Metadata::Cell, parthenon::Metadata::Derived},
-      std::vector<int>({2}), gamma_labels);
+  m = parthenon::Metadata({parthenon::Metadata::Cell, parthenon::Metadata::Derived},
+                          std::vector<int>({2}), gamma_labels);
   pkg->AddField(field_name, m);
 
   // Equation of state
@@ -271,9 +268,8 @@ InitializeHydro(ParameterInput *pin) {
     pkg->AddParam<>("update_lambda", false);
   } else if (eos_str == "helm") {
     if (ncomp < 1) {
-      PARTHENON_FAIL(
-          "[Apophis]: Helmholtz EOS is enabled but no composition is set. "
-          "Exiting.");
+      PARTHENON_FAIL("[Apophis]: Helmholtz EOS is enabled but no composition is set. "
+                     "Exiting.");
     }
     const bool eos_rad = pin->GetOrAddReal("eos", "radiation", 1);
     const bool eos_gas = pin->GetOrAddReal("eos", "gas", 1);
@@ -282,9 +278,8 @@ InitializeHydro(ParameterInput *pin) {
     const bool eos_degenerate = pin->GetOrAddReal("eos", "degenerate", 1);
     std::string helm_table_file =
         pin->GetOrAddString("eos", "helm_table", "helm_table.dat");
-    EOS_t eos =
-        singularity::Helmholtz(helm_table_file, eos_rad, eos_gas, eos_coulomb,
-                               eos_ionized, eos_degenerate);
+    EOS_t eos = singularity::Helmholtz(helm_table_file, eos_rad, eos_gas, eos_coulomb,
+                                       eos_ionized, eos_degenerate);
     EOS_t eos_device = eos.GetOnDevice();
     pkg->AddParam<>("eos", eos_device);
     pkg->AddParam<>("eos_host", eos);
@@ -297,10 +292,8 @@ InitializeHydro(ParameterInput *pin) {
   pkg->EstimateTimestepMesh = EstimateTimestep<Fluid::euler>;
 
   // Misc
-  Real dfloor =
-      pin->GetOrAddReal("hydro", "dfloor", std::sqrt(1024 * float_min));
-  Real pfloor =
-      pin->GetOrAddReal("hydro", "pfloor", std::sqrt(1024 * float_min));
+  Real dfloor = pin->GetOrAddReal("hydro", "dfloor", std::sqrt(1024 * float_min));
+  Real pfloor = pin->GetOrAddReal("hydro", "pfloor", std::sqrt(1024 * float_min));
 
   pkg->AddParam<Real>("hydro/density_floor", dfloor);
   pkg->AddParam<Real>("hydro/pressure_floor", pfloor);
@@ -312,19 +305,16 @@ InitializeHydro(ParameterInput *pin) {
   const auto refine_str = pin->GetOrAddString("refinement", "type", "unset");
   if (refine_str == "pressure_gradient") {
     pkg->CheckRefinementBlock = refinement::gradient::PressureGradient;
-    const auto thr =
-        pin->GetOrAddReal("refinement", "threshold_pressure_gradient", 0.0);
-    PARTHENON_REQUIRE(
-        thr > 0.,
-        "Make sure to set refinement/threshold_pressure_gradient >0.");
+    const auto thr = pin->GetOrAddReal("refinement", "threshold_pressure_gradient", 0.0);
+    PARTHENON_REQUIRE(thr > 0.,
+                      "Make sure to set refinement/threshold_pressure_gradient >0.");
     pkg->AddParam<Real>("refinement/threshold_pressure_gradient", thr);
   } else if (refine_str == "xyvelocity_gradient") {
     pkg->CheckRefinementBlock = refinement::gradient::VelocityGradient;
     const auto thr =
         pin->GetOrAddReal("refinement", "threshold_xyvelocity_gradient", 0.0);
-    PARTHENON_REQUIRE(
-        thr > 0.,
-        "Make sure to set refinement/threshold_xyvelocity_gradient >0.");
+    PARTHENON_REQUIRE(thr > 0.,
+                      "Make sure to set refinement/threshold_xyvelocity_gradient >0.");
     pkg->AddParam<Real>("refinement/threshold_xyvelocity_gradient", thr);
   } else if (refine_str == "maxdensity") {
     pkg->CheckRefinementBlock = refinement::other::MaxDensity;
@@ -332,12 +322,10 @@ InitializeHydro(ParameterInput *pin) {
         pin->GetOrAddReal("refinement", "maxdensity_deref_below", 0.0);
     const auto refine_above =
         pin->GetOrAddReal("refinement", "maxdensity_refine_above", 0.0);
-    PARTHENON_REQUIRE(
-        deref_below > 0.,
-        "Make sure to set refinement/maxdensity_deref_below > 0.");
-    PARTHENON_REQUIRE(
-        refine_above > 0.,
-        "Make sure to set refinement/maxdensity_refine_above > 0.");
+    PARTHENON_REQUIRE(deref_below > 0.,
+                      "Make sure to set refinement/maxdensity_deref_below > 0.");
+    PARTHENON_REQUIRE(refine_above > 0.,
+                      "Make sure to set refinement/maxdensity_refine_above > 0.");
     PARTHENON_REQUIRE(deref_below < refine_above,
                       "Make sure to set refinement/maxdensity_deref_below < "
                       "refinement/maxdensity_refine_above");
@@ -345,18 +333,30 @@ InitializeHydro(ParameterInput *pin) {
     pkg->AddParam<Real>("refinement/maxdensity_refine_above", refine_above);
   }
 
+  // Hst output
+  parthenon::HstVar_list hst_vars = {};
+
+  hst_vars.emplace_back(parthenon::HistoryOutputVar(
+      parthenon::UserHistoryOperation::sum,
+      GlobalQuantHst<Kokkos::Sum<Real, parthenon::HostExecSpace>, IDN>, "total_mass"));
+  hst_vars.emplace_back(parthenon::HistoryOutputVar(
+      parthenon::UserHistoryOperation::sum,
+      GlobalQuantHst<Kokkos::Sum<Real, parthenon::HostExecSpace>, IEN>, "total_energy"));
+
+  pkg->AddParam<>(parthenon::hist_param_key, hst_vars);
+
   return pkg;
 }
 
-template <Fluid fluid> Real EstimateTimestep(MeshData<Real> *md) {
+template <Fluid fluid>
+Real EstimateTimestep(MeshData<Real> *md) {
   static constexpr Real C_LIGHT = 2.99792458e10;
   auto pmb = md->GetBlockData(0)->GetBlockPointer();
   auto hydro_pkg = pmb->packages.Get("Hydro");
   const auto &cfl_hyp = hydro_pkg->Param<Real>("cfl");
   const auto &prim_pack = md->PackVariables(std::vector<std::string>{"prim"});
   const auto &cons_pack = md->PackVariables(std::vector<std::string>{"cons"});
-  const auto &eos_lambda_pack =
-      md->PackVariables(std::vector<std::string>{"eos_lambda"});
+  const auto &eos_lambda_pack = md->PackVariables(std::vector<std::string>{"eos_lambda"});
   const auto &eos_ = hydro_pkg->Param<EOS_t>("eos");
 
   IndexRange ib = md->GetBlockData(0)->GetBoundsI(IndexDomain::interior);
@@ -372,8 +372,7 @@ template <Fluid fluid> Real EstimateTimestep(MeshData<Real> *md) {
           parthenon::DevExecSpace(), {0, kb.s, jb.s, ib.s},
           {prim_pack.GetDim(5), kb.e + 1, jb.e + 1, ib.e + 1},
           {1, 1, 1, ib.e + 1 - ib.s}),
-      KOKKOS_LAMBDA(const int b, const int k, const int j, const int i,
-                    Real &min_dt) {
+      KOKKOS_LAMBDA(const int b, const int k, const int j, const int i, Real &min_dt) {
         const auto &prim = prim_pack(b);
         const auto &cons = cons_pack(b);
         auto &eos_lambda = eos_lambda_pack(b);
@@ -389,34 +388,30 @@ template <Fluid fluid> Real EstimateTimestep(MeshData<Real> *md) {
         w[IV3] = prim(IV3, k, j, i);
         w[IPR] = prim(IPR, k, j, i);
         Real lambda_max_x, lambda_max_y, lambda_max_z;
-        Real e_internal =
-            (cons(IEN, k, j, i) -
-             0.5 * w[IDN] * (SQR(w[IV1]) + SQR(w[IV2]) + SQR(w[IV3]))) /
-            w[IDN];
+        Real e_internal = (cons(IEN, k, j, i) -
+                           0.5 * w[IDN] * (SQR(w[IV1]) + SQR(w[IV2]) + SQR(w[IV3]))) /
+                          w[IDN];
 
         Real &abar = eos_lambda(0, k, j, i);
         Real &zbar = eos_lambda(1, k, j, i);
         Real &lT = eos_lambda(2, k, j, i);
         Real lambda[3] = {abar, zbar, lT};
-        Real bulkmod = eos.BulkModulusFromDensityInternalEnergy(
-            w[IDN], e_internal, lambda);
+        Real bulkmod =
+            eos.BulkModulusFromDensityInternalEnergy(w[IDN], e_internal, lambda);
 
         const Real gamma_c = bulkmod / w[IPR];
         lambda_max_x =
-            C_LIGHT * std::sqrt(gamma_c / (1 + (e_internal + SQR(C_LIGHT)) *
-                                                   w[IDN] / w[IPR]));
+            C_LIGHT *
+            std::sqrt(gamma_c / (1 + (e_internal + SQR(C_LIGHT)) * w[IDN] / w[IPR]));
         lambda_max_y = lambda_max_x;
         lambda_max_z = lambda_max_x;
 
-        min_dt = fmin(min_dt,
-                      coords.Dxc<1>(k, j, i) / (fabs(w[IV1]) + lambda_max_x));
+        min_dt = fmin(min_dt, coords.Dxc<1>(k, j, i) / (fabs(w[IV1]) + lambda_max_x));
         if (ndim > 1) {
-          min_dt = fmin(min_dt,
-                        coords.Dxc<2>(k, j, i) / (fabs(w[IV2]) + lambda_max_y));
+          min_dt = fmin(min_dt, coords.Dxc<2>(k, j, i) / (fabs(w[IV2]) + lambda_max_y));
         }
         if (ndim > 2) {
-          min_dt = fmin(min_dt,
-                        coords.Dxc<3>(k, j, i) / (fabs(w[IV3]) + lambda_max_z));
+          min_dt = fmin(min_dt, coords.Dxc<3>(k, j, i) / (fabs(w[IV3]) + lambda_max_z));
         }
       },
       Kokkos::Min<Real>(min_dt_hyperbolic));
@@ -424,10 +419,10 @@ template <Fluid fluid> Real EstimateTimestep(MeshData<Real> *md) {
   return cfl_hyp * min_dt_hyperbolic;
 }
 
-template <class T> void ConsToPrim(MeshData<Real> *md) {
+template <class T>
+void ConsToPrim(MeshData<Real> *md) {
   const auto &eos_ =
-      md->GetBlockData(0)->GetBlockPointer()->packages.Get("Hydro")->Param<T>(
-          "eos");
+      md->GetBlockData(0)->GetBlockPointer()->packages.Get("Hydro")->Param<T>("eos");
   auto pmb = md->GetBlockData(0)->GetBlockPointer();
   auto const cons_pack = md->PackVariables(std::vector<std::string>{"cons"});
   auto prim_pack = md->PackVariables(std::vector<std::string>{"prim"});
@@ -436,18 +431,15 @@ template <class T> void ConsToPrim(MeshData<Real> *md) {
   auto ib = cellbounds.GetBoundsI(IndexDomain::entire);
   auto jb = cellbounds.GetBoundsJ(IndexDomain::entire);
   auto kb = cellbounds.GetBoundsK(IndexDomain::entire);
-  auto density_floor_ =
-      pmb->packages.Get("Hydro")->Param<Real>("hydro/density_floor");
-  auto pressure_floor_ =
-      pmb->packages.Get("Hydro")->Param<Real>("hydro/pressure_floor");
-  auto eos_lambda_pack =
-      md->PackVariables(std::vector<std::string>{"eos_lambda"});
+  auto density_floor_ = pmb->packages.Get("Hydro")->Param<Real>("hydro/density_floor");
+  auto pressure_floor_ = pmb->packages.Get("Hydro")->Param<Real>("hydro/pressure_floor");
+  auto eos_lambda_pack = md->PackVariables(std::vector<std::string>{"eos_lambda"});
   bool update_lambda = pmb->packages.Get("Hydro")->Param<bool>("update_lambda");
 
   const auto nscalars = pmb->packages.Get("Hydro")->Param<int>("nscalars");
   const auto ncomp = pmb->packages.Get("Hydro")->Param<int>("ncomp");
-  const auto comp_abar = pmb->packages.Get("Hydro")->Param<std::vector<Real>>(
-      "comp_abar");
+  const auto comp_abar =
+      pmb->packages.Get("Hydro")->Param<std::vector<Real>>("comp_abar");
 
   // Temperature limits for root finding & initial guess
   static constexpr int ilTMin_ = 3;
@@ -456,9 +448,8 @@ template <class T> void ConsToPrim(MeshData<Real> *md) {
   static constexpr Real lTMax = ilTMax_;
 
   pmb->par_for(
-      "ConservedToPrimitive", 0, cons_pack.GetDim(5) - 1, kb.s, kb.e, jb.s,
-      jb.e, ib.s, ib.e,
-      KOKKOS_LAMBDA(const int b, const int k, const int j, const int i) {
+      "ConservedToPrimitive", 0, cons_pack.GetDim(5) - 1, kb.s, kb.e, jb.s, jb.e, ib.s,
+      ib.e, KOKKOS_LAMBDA(const int b, const int k, const int j, const int i) {
         const auto &cons = cons_pack(b);
         auto &prim = prim_pack(b);
         auto &gamma = gamma_pack(b);
@@ -512,8 +503,8 @@ template <class T> void ConsToPrim(MeshData<Real> *md) {
 
           Real lambda_tmp[3] = {abar, zbar, lT};
 
-          temp = eos.TemperatureFromDensityInternalEnergy(
-              u_d, (u_e - e_k) / u_d, lambda_tmp);
+          temp = eos.TemperatureFromDensityInternalEnergy(u_d, (u_e - e_k) / u_d,
+                                                          lambda_tmp);
           lT = std::log10(temp);
           // If initial guess is outside of range, set it to default value
           if ((lT < lTMin) || (lT > lTMax)) {
@@ -522,17 +513,16 @@ template <class T> void ConsToPrim(MeshData<Real> *md) {
         }
 
         Real lambda[3] = {abar, zbar, lT};
-        w_p = eos.PressureFromDensityInternalEnergy(u_d, (u_e - e_k) / u_d,
-                                                    lambda);
+        w_p = eos.PressureFromDensityInternalEnergy(u_d, (u_e - e_k) / u_d, lambda);
         Real gm1 = w_p / (u_d * e_k);
 
         // apply pressure floor, correct total energy
         u_e = (w_p > pressure_floor_) ? u_e : ((pressure_floor_ / gm1) + e_k);
         w_p = (w_p > pressure_floor_) ? w_p : pressure_floor_;
 
-        gamma_c = eos.BulkModulusFromDensityInternalEnergy(
-                      u_d, (u_e - e_k) / u_d, lambda) /
-                  w_p;
+        gamma_c =
+            eos.BulkModulusFromDensityInternalEnergy(u_d, (u_e - e_k) / u_d, lambda) /
+            w_p;
         gamma_e = w_p / (u_e - e_k) + 1;
 
         // Convert passive scalars
@@ -558,9 +548,11 @@ TaskStatus CalculateFluxes(std::shared_ptr<MeshData<Real>> &md) {
       jl = jb.s - 1, ju = jb.e + 1, kl = kb.s - 1, ku = kb.e + 1;
   }
 
-  std::vector<parthenon::MetadataFlag> flags_ind(
-      {parthenon::Metadata::Independent});
-  auto cons_pack = md->PackVariablesAndFluxes(flags_ind);
+  // TODO(alexhls): Make sure that we're getting the correct variables in the
+  // flux calculation.
+  // std::vector<parthenon::MetadataFlag> flags_ind({parthenon::Metadata::Independent});
+  // auto cons_pack = md->PackVariablesAndFluxes(flags_ind);
+  auto cons_pack = md->PackVariablesAndFluxes(std::vector<std::string>{"cons"});
   auto pkg = pmb->packages.Get("Hydro");
   const int nhydro = pkg->Param<int>("nhydro");
   const int nscalars = pkg->Param<int>("nscalars");
@@ -574,8 +566,7 @@ TaskStatus CalculateFluxes(std::shared_ptr<MeshData<Real>> &md) {
   auto const &prim_pack = md->PackVariables(prim_list);
   auto const &gamma_pack = md->PackVariables(gamma_list);
 
-  const auto &eos_lambda_pack =
-      md->PackVariables(std::vector<std::string>{"eos_lambda"});
+  const auto &eos_lambda_pack = md->PackVariables(std::vector<std::string>{"eos_lambda"});
 
   const int scratch_level =
       pkg->Param<int>("scratch_level"); // 0 is actual scratch (tiny); 1 is HBM
@@ -587,11 +578,9 @@ TaskStatus CalculateFluxes(std::shared_ptr<MeshData<Real>> &md) {
   auto riemann = Riemann<fluid, rsolver>();
 
   parthenon::par_for_outer(
-      DEFAULT_OUTER_LOOP_PATTERN, "x1 flux", DevExecSpace(),
-      scratch_size_in_bytes, scratch_level, 0, cons_pack.GetDim(5) - 1, kl, ku,
-      jl, ju,
-      KOKKOS_LAMBDA(parthenon::team_mbr_t member, const int b, const int k,
-                    const int j) {
+      DEFAULT_OUTER_LOOP_PATTERN, "x1 flux", DevExecSpace(), scratch_size_in_bytes,
+      scratch_level, 0, cons_pack.GetDim(5) - 1, kl, ku, jl, ju,
+      KOKKOS_LAMBDA(parthenon::team_mbr_t member, const int b, const int k, const int j) {
         const auto &coords = cons_pack.GetCoords(b);
         const auto &prim = prim_pack(b);
         const auto &gamma = gamma_pack(b);
@@ -601,32 +590,26 @@ TaskStatus CalculateFluxes(std::shared_ptr<MeshData<Real>> &md) {
                                          num_scratch_vars, nx1);
         parthenon::ScratchPad2D<Real> wr(member.team_scratch(scratch_level),
                                          num_scratch_vars, nx1);
-        parthenon::ScratchPad2D<Real> ifl(member.team_scratch(scratch_level), 2,
-                                          nx1);
-        parthenon::ScratchPad2D<Real> ifr(member.team_scratch(scratch_level), 2,
-                                          nx1);
+        parthenon::ScratchPad2D<Real> ifl(member.team_scratch(scratch_level), 2, nx1);
+        parthenon::ScratchPad2D<Real> ifr(member.team_scratch(scratch_level), 2, nx1);
         // get reconstructed state on faces
-        Reconstruct<recon, X1DIR>(member, k, j, ib.s - 1, ib.e + 1, prim, wl,
-                                  wr);
-        Reconstruct<recon, X1DIR>(member, k, j, ib.s - 1, ib.e + 1, gamma, ifl,
-                                  ifr);
+        Reconstruct<recon, X1DIR>(member, k, j, ib.s - 1, ib.e + 1, prim, wl, wr);
+        Reconstruct<recon, X1DIR>(member, k, j, ib.s - 1, ib.e + 1, gamma, ifl, ifr);
 
         // Sync all threads in the team so that scratch memory is consistent
         member.team_barrier();
 
-        riemann.Solve(member, k, j, ib.s, ib.e + 1, IV1, wl, wr, cons, ifl, ifr,
-                      eos, eos_lambda);
+        riemann.Solve(member, k, j, ib.s, ib.e + 1, IV1, wl, wr, cons, ifl, ifr, eos,
+                      eos_lambda);
         member.team_barrier();
 
         // Passive scalar fluxes
         for (auto n = nhydro; n < nhydro + nscalars; ++n) {
           parthenon::par_for_inner(member, ib.s, ib.e + 1, [&](const int i) {
             if (cons.flux(IV1, IDN, k, j, i) >= 0.0) {
-              cons.flux(IV1, n, k, j, i) =
-                  cons.flux(IV1, IDN, k, j, i) * wl(n, i);
+              cons.flux(IV1, n, k, j, i) = cons.flux(IV1, IDN, k, j, i) * wl(n, i);
             } else {
-              cons.flux(IV1, n, k, j, i) =
-                  cons.flux(IV1, IDN, k, j, i) * wr(n, i);
+              cons.flux(IV1, n, k, j, i) = cons.flux(IV1, IDN, k, j, i) * wr(n, i);
             }
           });
         }
@@ -644,9 +627,8 @@ TaskStatus CalculateFluxes(std::shared_ptr<MeshData<Real>> &md) {
       kl = kb.s - 1, ku = kb.e + 1;
 
     parthenon::par_for_outer(
-        DEFAULT_OUTER_LOOP_PATTERN, "x2 flux", DevExecSpace(),
-        scratch_size_in_bytes, scratch_level, 0, cons_pack.GetDim(5) - 1, kl,
-        ku,
+        DEFAULT_OUTER_LOOP_PATTERN, "x2 flux", DevExecSpace(), scratch_size_in_bytes,
+        scratch_level, 0, cons_pack.GetDim(5) - 1, kl, ku,
         KOKKOS_LAMBDA(parthenon::team_mbr_t member, const int b, const int k) {
           const auto &coords = cons_pack.GetCoords(b);
           const auto &prim = prim_pack(b);
@@ -659,12 +641,9 @@ TaskStatus CalculateFluxes(std::shared_ptr<MeshData<Real>> &md) {
                                            num_scratch_vars, nx1);
           parthenon::ScratchPad2D<Real> wlb(member.team_scratch(scratch_level),
                                             num_scratch_vars, nx1);
-          parthenon::ScratchPad2D<Real> ifl(member.team_scratch(scratch_level),
-                                            2, nx1);
-          parthenon::ScratchPad2D<Real> ifr(member.team_scratch(scratch_level),
-                                            2, nx1);
-          parthenon::ScratchPad2D<Real> iflb(member.team_scratch(scratch_level),
-                                             2, nx1);
+          parthenon::ScratchPad2D<Real> ifl(member.team_scratch(scratch_level), 2, nx1);
+          parthenon::ScratchPad2D<Real> ifr(member.team_scratch(scratch_level), 2, nx1);
+          parthenon::ScratchPad2D<Real> iflb(member.team_scratch(scratch_level), 2, nx1);
           for (int j = jb.s - 1; j <= jb.e + 1; ++j) {
             // reconstruct L/R states at j
             Reconstruct<recon, X2DIR>(member, k, j, il, iu, prim, wlb, wr);
@@ -673,19 +652,17 @@ TaskStatus CalculateFluxes(std::shared_ptr<MeshData<Real>> &md) {
             member.team_barrier();
 
             if (j > jb.s - 1) {
-              riemann.Solve(member, k, j, il, iu, IV2, wl, wr, cons, ifl, ifr,
-                            eos, eos_lambda);
+              riemann.Solve(member, k, j, il, iu, IV2, wl, wr, cons, ifl, ifr, eos,
+                            eos_lambda);
               member.team_barrier();
 
               // Passive scalar fluxes
               for (auto n = nhydro; n < nhydro + nscalars; ++n) {
                 parthenon::par_for_inner(member, il, iu, [&](const int i) {
                   if (cons.flux(IV2, IDN, k, j, i) >= 0.0) {
-                    cons.flux(IV2, n, k, j, i) =
-                        cons.flux(IV2, IDN, k, j, i) * wl(n, i);
+                    cons.flux(IV2, n, k, j, i) = cons.flux(IV2, IDN, k, j, i) * wl(n, i);
                   } else {
-                    cons.flux(IV2, n, k, j, i) =
-                        cons.flux(IV2, IDN, k, j, i) * wr(n, i);
+                    cons.flux(IV2, n, k, j, i) = cons.flux(IV2, IDN, k, j, i) * wr(n, i);
                   }
                 });
               }
@@ -711,9 +688,8 @@ TaskStatus CalculateFluxes(std::shared_ptr<MeshData<Real>> &md) {
     il = ib.s - 1, iu = ib.e + 1, jl = jb.s - 1, ju = jb.e + 1;
 
     parthenon::par_for_outer(
-        DEFAULT_OUTER_LOOP_PATTERN, "x3 flux", DevExecSpace(),
-        scratch_size_in_bytes, scratch_level, 0, cons_pack.GetDim(5) - 1, jl,
-        ju,
+        DEFAULT_OUTER_LOOP_PATTERN, "x3 flux", DevExecSpace(), scratch_size_in_bytes,
+        scratch_level, 0, cons_pack.GetDim(5) - 1, jl, ju,
         KOKKOS_LAMBDA(parthenon::team_mbr_t member, const int b, const int j) {
           const auto &coords = cons_pack.GetCoords(b);
           const auto &prim = prim_pack(b);
@@ -726,12 +702,9 @@ TaskStatus CalculateFluxes(std::shared_ptr<MeshData<Real>> &md) {
                                            num_scratch_vars, nx1);
           parthenon::ScratchPad2D<Real> wlb(member.team_scratch(scratch_level),
                                             num_scratch_vars, nx1);
-          parthenon::ScratchPad2D<Real> ifl(member.team_scratch(scratch_level),
-                                            2, nx1);
-          parthenon::ScratchPad2D<Real> ifr(member.team_scratch(scratch_level),
-                                            2, nx1);
-          parthenon::ScratchPad2D<Real> iflb(member.team_scratch(scratch_level),
-                                             2, nx1);
+          parthenon::ScratchPad2D<Real> ifl(member.team_scratch(scratch_level), 2, nx1);
+          parthenon::ScratchPad2D<Real> ifr(member.team_scratch(scratch_level), 2, nx1);
+          parthenon::ScratchPad2D<Real> iflb(member.team_scratch(scratch_level), 2, nx1);
           for (int k = kb.s - 1; k <= kb.e + 1; ++k) {
             // reconstruct L/R states at j
             Reconstruct<recon, X3DIR>(member, k, j, il, iu, prim, wlb, wr);
@@ -740,19 +713,17 @@ TaskStatus CalculateFluxes(std::shared_ptr<MeshData<Real>> &md) {
             member.team_barrier();
 
             if (k > kb.s - 1) {
-              riemann.Solve(member, k, j, il, iu, IV3, wl, wr, cons, ifl, ifr,
-                            eos, eos_lambda);
+              riemann.Solve(member, k, j, il, iu, IV3, wl, wr, cons, ifl, ifr, eos,
+                            eos_lambda);
               member.team_barrier();
 
               // Passive scalar fluxes
               for (auto n = nhydro; n < nhydro + nscalars; ++n) {
                 parthenon::par_for_inner(member, il, iu, [&](const int i) {
                   if (cons.flux(IV3, IDN, k, j, i) >= 0.0) {
-                    cons.flux(IV3, n, k, j, i) =
-                        cons.flux(IV3, IDN, k, j, i) * wl(n, i);
+                    cons.flux(IV3, n, k, j, i) = cons.flux(IV3, IDN, k, j, i) * wl(n, i);
                   } else {
-                    cons.flux(IV3, n, k, j, i) =
-                        cons.flux(IV3, IDN, k, j, i) * wr(n, i);
+                    cons.flux(IV3, n, k, j, i) = cons.flux(IV3, IDN, k, j, i) * wr(n, i);
                   }
                 });
               }
@@ -770,6 +741,33 @@ TaskStatus CalculateFluxes(std::shared_ptr<MeshData<Real>> &md) {
   }
 
   return TaskStatus::complete;
+}
+
+template <typename T, int idx>
+Real GlobalQuantHst(MeshData<Real> *md) {
+  auto pmb = md->GetBlockData(0)->GetBlockPointer();
+
+  const auto ib = pmb->cellbounds.GetBoundsI(IndexDomain::interior);
+  const auto jb = pmb->cellbounds.GetBoundsJ(IndexDomain::interior);
+  const auto kb = pmb->cellbounds.GetBoundsK(IndexDomain::interior);
+
+  const auto &cons_pack = md->PackVariables(std::vector<std::string>{"cons"});
+
+  Real result = 0.0;
+
+  T reducer(result);
+  parthenon::par_reduce(
+      parthenon::loop_pattern_mdrange_tag, PARTHENON_AUTO_LABEL, DevExecSpace(), 0,
+      cons_pack.GetDim(5) - 1, kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
+      KOKKOS_LAMBDA(const int b, const int k, const int j, const int i, Real &lresult) {
+        const auto &coords = cons_pack.GetCoords(b);
+
+        const Real vol = coords.CellVolume(k, j, i);
+        reducer.join(lresult, cons_pack(b, idx, k, j, i) * vol);
+      },
+      reducer);
+
+  return result;
 }
 
 } // namespace Apophis

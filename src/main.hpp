@@ -20,7 +20,7 @@ enum {
 };
 
 enum {
-  LIFL = 0, // fuel
+  LIFL = 0,  // fuel
   LIDST = 1, // dist
 };
 
@@ -38,6 +38,7 @@ enum class Reconstruction {
 
 enum class RiemannSolver {
   undefined,
+  none,
   hlle,
   hllc,
   lhllc,
@@ -55,6 +56,8 @@ enum class Gravity {
   undefined,
   none,
   constant,
+  monopole,
+  poisson,
 };
 
 constexpr parthenon::Real float_min{std::numeric_limits<float>::min()};

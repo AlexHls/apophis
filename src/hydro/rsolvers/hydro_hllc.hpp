@@ -15,8 +15,8 @@ struct Riemann<Fluid::euler, RiemannSolver::hllc> {
   Solve(parthenon::team_mbr_t const &member, const int k, const int j, const int il,
         const int iu, const int ivx, const ScratchPad2D<Real> &wl,
         const ScratchPad2D<Real> &wr, parthenon::VariableFluxPack<Real> &cons,
-        const ScratchPad2D<Real> &ifl, const ScratchPad2D<Real> &ifr,
-        const EOS_t &eos, parthenon::VariablePack<Real> &eos_lambda) {
+        const ScratchPad2D<Real> &ifl, const ScratchPad2D<Real> &ifr, const EOS_t &eos,
+        parthenon::VariablePack<Real> &eos_lambda) {
     int ivy = IV1 + ((ivx - IV1) + 1) % 3;
     int ivz = IV1 + ((ivx - IV1) + 2) % 3;
     static constexpr Real C_LIGHT = 2.99792458e10;

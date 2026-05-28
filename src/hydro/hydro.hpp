@@ -3,30 +3,30 @@
 
 #include "../main.hpp"
 
+#include "interface/mesh_data.hpp"
 #include "parthenon/parthenon.hpp"
-#include <singularity-eos/eos/eos_ideal.hpp>
 #include <singularity-eos/eos/eos_helmholtz.hpp>
+#include <singularity-eos/eos/eos_ideal.hpp>
 #include <singularity-eos/eos/eos_variant.hpp>
 
 using namespace parthenon::driver::prelude;
 
 namespace Apophis {
 
-std::shared_ptr<parthenon::StateDescriptor>
-InitializeHydro(ParameterInput *pin);
+std::shared_ptr<parthenon::StateDescriptor> InitializeHydro(ParameterInput *pin);
 
 template <Fluid fluid>
-  Real EstimateTimestep(MeshData<Real> *md);
+Real EstimateTimestep(MeshData<Real> *md);
 
 template <class T>
-  void ConsToPrim(MeshData<Real> *md);
+void ConsToPrim(MeshData<Real> *md);
 
 TaskStatus CalculateFluxes(std::shared_ptr<MeshData<Real>> &md);
 
 template <Fluid fluid, Reconstruction recon, RiemannSolver rsolver>
 TaskStatus CalculateFluxes(std::shared_ptr<MeshData<Real>> &md);
-using FluxFun_t = decltype(CalculateFluxes<Fluid::euler, Reconstruction::plm,
-                                           RiemannSolver::hllc>);
+using FluxFun_t =
+    decltype(CalculateFluxes<Fluid::euler, Reconstruction::plm, RiemannSolver::hllc>);
 using FluxFunKey_t = std::tuple<Fluid, Reconstruction, RiemannSolver>;
 
 // Add flux function pointer to map containing all compiled in flux functions
@@ -37,14 +37,17 @@ void add_flux_fun(std::map<FluxFunKey_t, FluxFun_t *> &flux_functions) {
 }
 
 template <Fluid fluid>
-  constexpr size_t GetNVars();
+constexpr size_t GetNVars();
 
 template <>
-  constexpr size_t GetNVars<Fluid::euler>() {
-    return 5;
-  }
+constexpr size_t GetNVars<Fluid::euler>() {
+  return 5;
+}
 
 using EOS_t = singularity::Variant<singularity::IdealGas, singularity::Helmholtz>;
+
+template <typename T, int idx>
+Real GlobalQuantHst(MeshData<Real> *md);
 
 } // namespace Apophis
 

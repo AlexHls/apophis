@@ -4,9 +4,9 @@
 #include "parthenon/driver.hpp"
 
 namespace sod {
-  using namespace parthenon::driver::prelude;
+using namespace parthenon::driver::prelude;
 
-  void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin);
+void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin);
 } // namespace sod
 
 namespace linear_wave {
@@ -40,5 +40,18 @@ namespace rt {
 using namespace parthenon::driver::prelude;
 
 void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin);
+void PostInitialization(MeshBlock *pmb, ParameterInput *pin);
 } // namespace rt
+
+namespace ec {
+using namespace parthenon::driver::prelude;
+
+void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin);
+} // namespace ec
+
+namespace grav_test {
+using namespace parthenon::driver::prelude;
+
+void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin);
+} // namespace grav_test
 #endif // PGEN_PGEN_HPP_

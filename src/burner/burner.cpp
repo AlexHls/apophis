@@ -10,8 +10,7 @@ using namespace parthenon::package::prelude;
 
 namespace Apophis {
 
-TaskStatus Burn(std::shared_ptr<MeshData<Real>> &md, const int lset_id,
-                const Real dt) {
+TaskStatus Burn(std::shared_ptr<MeshData<Real>> &md, const int lset_id, const Real dt) {
   auto pmb = md->GetBlockData(0)->GetBlockPointer();
   auto hydro_pkg = pmb->packages.Get("Hydro");
   const auto &prim_pack = md->PackVariables(std::vector<std::string>{"prim"});
@@ -34,14 +33,13 @@ TaskStatus Burn(std::shared_ptr<MeshData<Real>> &md, const int lset_id,
   const auto ncomp = hydro_pkg->Param<int>("ncomp");
   const int lset_idx = NHYDRO + ncomp + 1 + lset_id; // 1 for ye
 
-  auto &lset_pack = md->PackVariables(
-      std::vector<std::string>{"lset" + std::to_string(lset_id)});
+  auto &lset_pack =
+      md->PackVariables(std::vector<std::string>{"lset" + std::to_string(lset_id)});
 
   const auto ndim_ = cons_pack.GetNdim();
   pmb->par_for(
-      "Levelset advection", 0, cons_pack.GetDim(5) - 1, kl, ku, jl, ju,
-      ib.s - 1, ib.e + 1,
-      KOKKOS_LAMBDA(const int b, const int k, const int j, const int i) {
+      "Levelset advection", 0, cons_pack.GetDim(5) - 1, kl, ku, jl, ju, ib.s - 1,
+      ib.e + 1, KOKKOS_LAMBDA(const int b, const int k, const int j, const int i) {
         auto &cons = cons_pack(b);
         const auto &coords = prim_pack.GetCoords(b);
 
@@ -113,8 +111,7 @@ TaskStatus Burn(std::shared_ptr<MeshData<Real>> &md, const int lset_id,
         // Advect the levelset with the flame speed
         Real &u_ye = cons(NHYDRO + ncomp, k, j, i);
         Real ye = u_ye / u_d;
-        Real vburn =
-            16.0e5 * std::pow((u_d / 1.0e9), 0.813) * (1.0 + 96.8 * (0.5 - ye));
+        Real vburn = 16.0e5 * std::pow((u_d / 1.0e9), 0.813) * (1.0 + 96.8 * (0.5 - ye));
         p_lset = p_lset + 0.5 * std::sqrt(h) * vburn * dt;
         u_lset = p_lset * u_d;
       });

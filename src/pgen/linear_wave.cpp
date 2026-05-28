@@ -17,7 +17,8 @@ using parthenon::X1DIR;
 using parthenon::X2DIR;
 using parthenon::X3DIR;
 
-// TODO(pgrete) temp fix to address removal in Parthenon. Update when merging with MHD
+// TODO(pgrete) temp fix to address removal in Parthenon. Update when merging
+// with MHD
 constexpr int NWAVE = 5;
 constexpr int NFIELD = 0;
 
@@ -56,8 +57,8 @@ void InitUserMeshData(Mesh *, ParameterInput *pin) {
   // For wavevector along coordinate axes, set desired values of ang_2/ang_3.
   //    For example, for 1D problem use ang_2 = ang_3 = 0.0
   //    For wavevector along grid diagonal, do not input values for ang_2/ang_3.
-  // Code below will automatically calculate these imposing periodicity and exactly one
-  // wavelength along each grid direction
+  // Code below will automatically calculate these imposing periodicity and
+  // exactly one wavelength along each grid direction
   // TODO (pgrete) technically the following is processed by the Mesh class.
   // However this function does not necessarily need to belong to Mesh so
   // the info is not readily available.
@@ -134,7 +135,8 @@ void InitUserMeshData(Mesh *, ParameterInput *pin) {
   Eigensystem(d0, u0, v0, w0, h0, bx0, by0, bz0, xfact, yfact, ev, rem, lem);
 
   // TODO(pgrete) see how to get access to the SimTime object outside the driver
-  // if (pin->GetOrAddBoolean("problem/linear_wave", "test", false) && ncycle == 0) {
+  // if (pin->GetOrAddBoolean("problem/linear_wave", "test", false) && ncycle ==
+  // 0) {
   if (pin->GetOrAddBoolean("problem/linear_wave", "test", false)) {
     // reinterpret tlim as the number of orbital periods
     Real tlim = pin->GetReal("parthenon/time", "tlim");
@@ -196,7 +198,8 @@ void UserWorkAfterLoop(Mesh *mesh, ParameterInput *pin, parthenon::SimTime &tm) 
     for (int k = kb.s; k <= kb.e; ++k) {
       for (int j = jb.s; j <= jb.e; ++j) {
         for (int i = ib.s; i <= ib.e; ++i) {
-          // Load cell-averaged <U>, either midpoint approx. or fourth-order approx
+          // Load cell-averaged <U>, either midpoint approx. or fourth-order
+          // approx
           Real d1 = cons_(IDN, k, j, i);
           Real m1 = cons_(IM1, k, j, i);
           Real m2 = cons_(IM2, k, j, i);
@@ -302,8 +305,8 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
   IndexRange ib = pmb->cellbounds.GetBoundsI(IndexDomain::interior);
   IndexRange jb = pmb->cellbounds.GetBoundsJ(IndexDomain::interior);
   IndexRange kb = pmb->cellbounds.GetBoundsK(IndexDomain::interior);
-  // Initialize the magnetic fields.  Note wavevector, eigenvectors, and other variables
-  // are set in InitUserMeshData
+  // Initialize the magnetic fields.  Note wavevector, eigenvectors, and other
+  // variables are set in InitUserMeshData
 
   // initialize conserved variables
   auto &rc = pmb->meshblock_data.Get();

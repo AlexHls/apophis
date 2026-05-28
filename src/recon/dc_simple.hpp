@@ -28,7 +28,6 @@ Reconstruct(parthenon::team_mbr_t const &member, const int k, const int j, const
       }
     });
   }
-
 }
 
 #endif // RECON_DC_SIMPLE_HPP_

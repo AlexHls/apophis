@@ -1,14 +1,19 @@
 // REFERENCES:
-// - (CW) P. Colella & P. Woodward, "The Piecewise Parabolic Method (PPM) for Gas-
+// - (CW) P. Colella & P. Woodward, "The Piecewise Parabolic Method (PPM) for
+// Gas-
 //   Dynamical Simulations", JCP, 54, 174 (1984)
-// - (CS) P. Colella & M. Sekora, "A limiter for PPM that preserves accuracy at smooth
+// - (CS) P. Colella & M. Sekora, "A limiter for PPM that preserves accuracy at
+// smooth
 //   extrema", JCP, 227, 7069 (2008)
 // - (MC) P. McCorquodale & P. Colella,  "A high-order finite-volume method for
 //   conservation laws on locally refined grids", CAMCoS, 6, 1 (2011)
-// - (CD) P. Colella, M.R. Dorr, J. Hittinger, D. Martin, "High-order, finite-volume
+// - (CD) P. Colella, M.R. Dorr, J. Hittinger, D. Martin, "High-order,
+// finite-volume
 //   methods in mapped coordinates", JCP, 230, 2952 (2011)
-// - (Mignone) A. Mignone, "High-order conservative reconstruction schemes for finite
-//   volume methods in cylindrical and spherical coordinates", JCP, 270, 784 (2014
+// - (Mignone) A. Mignone, "High-order conservative reconstruction schemes for
+// finite
+//   volume methods in cylindrical and spherical coordinates", JCP, 270, 784
+//   (2014
 
 #ifndef RECON_PPM_SIMPLE_HPP_
 #define RECON_PPM_SIMPLE_HPP_
@@ -20,8 +25,8 @@
 
 #include <parthenon/parthenon.hpp>
 
-using parthenon::ScratchPad2D;
 using parthenon::Real;
+using parthenon::ScratchPad2D;
 
 KOKKOS_INLINE_FUNCTION
 void PPM(const Real &q_im2, const Real &q_im1, const Real &q_i, const Real &q_ip1,
@@ -29,7 +34,8 @@ void PPM(const Real &q_im2, const Real &q_im1, const Real &q_i, const Real &q_ip
 
   // CS08 constant used in second derivative limiter, >1 , independent of h
   const Real C2 = 1.25;
-  //--- Step 1. --------------------------------------------------------------------------
+  //--- Step 1.
+  //--------------------------------------------------------------------------
   // Reconstruct interface averages <a>_{i-1/2} and <a>_{i+1/2}
   Real qa = (q_i - q_im1);
   Real qb = (q_ip1 - q_i);
@@ -42,10 +48,12 @@ void PPM(const Real &q_im2, const Real &q_im1, const Real &q_i, const Real &q_ip
   Real dph = 0.5 * (q_im1 + q_i) + (dd_im1 - dd) / 6.0;
   Real dph_ip1 = 0.5 * (q_i + q_ip1) + (dd - dd_ip1) / 6.0;
 
-  //--- Step 2a. -----------------------------------------------------------------------
-  // Uniform Cartesian-like coordinate: limit interpolated interface states (CD 4.3.1)
-  // approximate second derivative at interfaces for smooth extrema preservation
-  // KGF: add the off-centered quantities first to preserve FP symmetry
+  //--- Step 2a.
+  //-----------------------------------------------------------------------
+  // Uniform Cartesian-like coordinate: limit interpolated interface states
+  // (CD 4.3.1) approximate second derivative at interfaces for smooth extrema
+  // preservation KGF: add the off-centered quantities first to preserve FP
+  // symmetry
   const Real d2qc_im1 = q_im2 + q_i - 2.0 * q_im1;
   const Real d2qc = q_im1 + q_ip1 - 2.0 * q_i; // (CD eq 85a) (no 1/2)
   const Real d2qc_ip1 = q_i + q_ip2 - 2.0 * q_ip1;
@@ -91,13 +99,16 @@ void PPM(const Real &q_im2, const Real &q_im1, const Real &q_i, const Real &q_ip
   qr_i = dph;
   ql_ip1 = dph_ip1;
 
-  //--- Step 3. ------------------------------------------------------------------------
+  //--- Step 3.
+  //------------------------------------------------------------------------
   // Compute cell-centered difference stencils (MC section 2.4.1)
   const Real dqf_minus = q_i - qr_i; // (CS eq 25) = -dQ^- in Mignone's notation
   const Real dqf_plus = ql_ip1 - q_i;
 
-  //--- Step 4. ------------------------------------------------------------------------
-  // For uniform Cartesian-like coordinate: apply CS limiters to parabolic interpolant
+  //--- Step 4.
+  //------------------------------------------------------------------------
+  // For uniform Cartesian-like coordinate: apply CS limiters to parabolic
+  // interpolant
   qa_tmp = dqf_minus * dqf_plus;
   qb_tmp = (q_ip1 - q_i) * (q_i - q_im1);
 

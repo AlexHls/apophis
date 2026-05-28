@@ -6,9 +6,9 @@
 
 #include "parthenon/parthenon.hpp"
 
-using parthenon::ScratchPad2D;
 using parthenon::ParArray4D;
 using parthenon::Real;
+using parthenon::ScratchPad2D;
 
 //----------------------------------------------------------------------------------------
 //! \fn void Hydro::RiemannSolver
@@ -19,8 +19,8 @@ struct Riemann<Fluid::euler, RiemannSolver::hlle> {
       parthenon::team_mbr_t const &member, const int k, const int j, const int il,
       const int iu, const int ivx, const ScratchPad2D<Real> &wl,
       const ScratchPad2D<Real> &wr, parthenon::VariableFluxPack<Real> &cons,
-      const ScratchPad2D<Real> &ifl, const ScratchPad2D<Real> &ifr,
-      const EOS_t &eos, parthenon::VariablePack<Real> &eos_lambda) {
+      const ScratchPad2D<Real> &ifl, const ScratchPad2D<Real> &ifr, const EOS_t &eos,
+      parthenon::VariablePack<Real> &eos_lambda) {
     int ivy = IV1 + ((ivx - IV1) + 1) % 3;
     int ivz = IV1 + ((ivx - IV1) + 2) % 3;
     static constexpr Real C_LIGHT = 2.99792458e10;
@@ -93,7 +93,8 @@ struct Riemann<Fluid::euler, RiemannSolver::hlle> {
       Real bp = ar > 0.0 ? ar : 0.0;
       Real bm = al < 0.0 ? al : 0.0;
 
-      //-- Step 5. Compute L/R fluxes along lines bm/bp: F_L - (S_L)U_L; F_R - (S_R)U_R
+      //-- Step 5. Compute L/R fluxes along lines bm/bp: F_L - (S_L)U_L; F_R -
+      //(S_R)U_R
       Real vxl = wli[IV1] - bm;
       Real vxr = wri[IV1] - bp;
 
