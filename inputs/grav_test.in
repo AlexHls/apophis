@@ -5,33 +5,42 @@ problem = Gravity accuracy test
 problem_id = gravity_test
 
 <parthenon/mesh>
-refinement = none 
+refinement = static
 multigrid = true
 numlevel = 3
 nghost = 2
 
-nx1 = 64
+nx1 = 32
 x1min = -0.5
 x1max = 0.5
 ix1_bc = outflow
 ox1_bc = outflow
 
-nx2 = 64
+nx2 = 32
 x2min = -0.5
 x2max = 0.5
 ix2_bc = outflow
 ox2_bc = outflow
 
-nx3 = 64
+nx3 = 32
 x3min = -0.5
 x3max = 0.5
 ix3_bc = outflow
 ox3_bc = outflow
 
 <parthenon/meshblock>
-nx1=32
-nx2=32
-nx3=32
+nx1=16
+nx2=16
+nx3=16
+
+<parthenon/static_refinement1>
+x1min = -0.25
+x1max = 0.25
+x2min = -0.25
+x2max = 0.25
+x3min = -0.25
+x3max = 0.25
+level = 2
 
 <parthenon/time>
 integrator = rk2
@@ -80,4 +89,4 @@ do_FAS = true
 <parthenon/output0>
 file_type = hdf5
 dt = 0.1
-variables = prim,gravity
+variables = gravity

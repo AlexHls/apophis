@@ -19,6 +19,8 @@
 #include "utils/error_checking.hpp"
 #include "utils/reductions.hpp"
 #include <bvals/boundary_conditions_generic.hpp>
+#include <algorithm>
+#include <cmath>
 #include <mpi.h>
 #include <solvers/bicgstab_solver.hpp>
 #include <solvers/solver_utils.hpp>
@@ -176,8 +178,27 @@ std::shared_ptr<parthenon::StateDescriptor> InitializeGravity(ParameterInput *pi
 
   // If multipole solver, add solver settings
   if (gravity == Gravity::monopole) {
-    const Real rmax = pin->GetInteger("gravity", "rmax");
+    const Real x1min = pin->GetReal("parthenon/mesh", "x1min");
+    const Real x1max = pin->GetReal("parthenon/mesh", "x1max");
+    const Real x2min = pin->GetOrAddReal("parthenon/mesh", "x2min", 0.0);
+    const Real x2max = pin->GetOrAddReal("parthenon/mesh", "x2max", 0.0);
+    const Real x3min = pin->GetOrAddReal("parthenon/mesh", "x3min", 0.0);
+    const Real x3max = pin->GetOrAddReal("parthenon/mesh", "x3max", 0.0);
+    const Real x1edge = std::max(std::abs(x1min), std::abs(x1max));
+    const Real x2edge = std::max(std::abs(x2min), std::abs(x2max));
+    const Real x3edge = std::max(std::abs(x3min), std::abs(x3max));
+    const Real default_rmax =
+        std::sqrt(x1edge * x1edge + x2edge * x2edge + x3edge * x3edge);
+    const Real rmax = pin->GetOrAddReal("gravity", "rmax", default_rmax);
+    if (rmax <= 0.0) {
+      PARTHENON_FAIL("[Apophis]: gravity/rmax must be positive for monopole gravity.");
+    }
     pkg->AddParam<Real>("rmax", rmax);
+
+    auto m_phi =
+        parthenon::Metadata({parthenon::Metadata::Cell, parthenon::Metadata::Derived,
+                             parthenon::Metadata::OneCopy});
+    pkg->AddField(phi::name(), m_phi);
   }
 
   // If poisson solver, add the potential field and set solver settings
