@@ -21,7 +21,33 @@ sys.dont_write_bytecode = True
 
 SOLVERS = ["poisson", "monopole"]
 RESOLUTIONS = [16, 32, 64]
-ALL_CFGS = list(itertools.product(SOLVERS, RESOLUTIONS))
+UNIFORM_CFGS = [
+    {
+        "solver": solver,
+        "resolution": resolution,
+        "meshblock": resolution,
+        "refined": False,
+        "tag": f"{solver}_{resolution}",
+    }
+    for solver, resolution in itertools.product(SOLVERS, RESOLUTIONS)
+]
+REFINED_CFGS = [
+    {
+        "solver": solver,
+        "resolution": 16,
+        "meshblock": 8,
+        "refined": True,
+        "tag": f"{solver}_smr_16",
+    }
+    for solver in SOLVERS
+]
+ALL_CFGS = UNIFORM_CFGS + REFINED_CFGS
+REFINED_LIMITS = {
+    "phi_l2": 5.0e-3,
+    "gx_l2": 5.0e-2,
+    "phi_max": 5.0e-2,
+    "gx_max": 2.0e-1,
+}
 
 
 def analytic_phi(r, rho0=1.0, r0=0.25, grav_g=1.0):
@@ -174,7 +200,11 @@ def l2_norm(values):
     return np.sqrt(np.mean(values**2))
 
 
-def plot_residual(data_file, phi_error, gx_error, output_path, solver, resolution):
+def plot_residual(data_file, phi_error, gx_error, output_path, config):
+    solver = config["solver"]
+    resolution = config["resolution"]
+    suffix = " with SMR" if config["refined"] else ""
+
     phi_vertices, phi_values, horizontal, vertical, normal = slice_cells(
         data_file, np.abs(phi_error)
     )
@@ -204,14 +234,14 @@ def plot_residual(data_file, phi_error, gx_error, output_path, solver, resolutio
 
     fig.suptitle(
         (
-            f"{solver}, {resolution}^3: "
+            f"{solver}, {resolution}^3{suffix}: "
             f"phi L2={l2_norm(phi_error):.3e}, gx L2={l2_norm(gx_error):.3e}"
         ),
         fontsize=11,
     )
 
     fig.savefig(
-        os.path.join(output_path, f"gravity_residual_{solver}_{resolution}.png"),
+        os.path.join(output_path, f"gravity_residual_{config['tag']}.png"),
         bbox_inches="tight",
         dpi=200,
     )
@@ -254,8 +284,10 @@ def plot_convergence(errors, output_path):
 
 class TestCase(utils.test_case.TestCaseAbs):
     def Prepare(self, parameters, step):
-        solver, resolution = ALL_CFGS[step - 1]
-        meshblock = resolution
+        config = ALL_CFGS[step - 1]
+        solver = config["solver"]
+        resolution = config["resolution"]
+        meshblock = config["meshblock"]
 
         parameters.driver_cmd_line_args = [
             f"parthenon/mesh/nx1={resolution}",
@@ -264,14 +296,22 @@ class TestCase(utils.test_case.TestCaseAbs):
             f"parthenon/meshblock/nx1={meshblock}",
             f"parthenon/meshblock/nx2={meshblock}",
             f"parthenon/meshblock/nx3={meshblock}",
-            "parthenon/mesh/refinement=none",
-            "parthenon/static_refinement1/level=1",
             f"gravity/type={solver}",
             f"parthenon/output0/id={step}",
             "parthenon/output0/variables=gravity",
             "parthenon/output0/dt=1.0",
             "parthenon/time/nlim=1",
         ]
+        if config["refined"]:
+            parameters.driver_cmd_line_args += [
+                "parthenon/mesh/refinement=static",
+                "parthenon/static_refinement1/level=2",
+            ]
+        else:
+            parameters.driver_cmd_line_args += [
+                "parthenon/mesh/refinement=none",
+                "parthenon/static_refinement1/level=1",
+            ]
         if solver == "monopole":
             parameters.driver_cmd_line_args.append(f"gravity/nrbin={4 * resolution}")
 
@@ -292,7 +332,9 @@ class TestCase(utils.test_case.TestCaseAbs):
         errors = []
         test_success = True
 
-        for step, (solver, resolution) in enumerate(ALL_CFGS, start=1):
+        for step, config in enumerate(ALL_CFGS, start=1):
+            solver = config["solver"]
+            resolution = config["resolution"]
             data_filename = os.path.join(
                 parameters.output_path, f"parthenon.{step}.final.phdf"
             )
@@ -305,39 +347,59 @@ class TestCase(utils.test_case.TestCaseAbs):
             phi_error, gx_error = get_errors(data_file)
             phi_l2 = l2_norm(phi_error)
             gx_l2 = l2_norm(gx_error)
+            phi_max = np.max(np.abs(phi_error))
+            gx_max = np.max(np.abs(gx_error))
 
             if not np.isfinite(phi_l2) or not np.isfinite(gx_l2):
                 print(f"Non-finite gravity error for {solver} at {resolution}^3.")
                 test_success = False
+            if config["refined"]:
+                for quantity, value in [
+                    ("phi_l2", phi_l2),
+                    ("gx_l2", gx_l2),
+                    ("phi_max", phi_max),
+                    ("gx_max", gx_max),
+                ]:
+                    if value > REFINED_LIMITS[quantity]:
+                        print(
+                            f"{solver} SMR {quantity}={value:.6e} exceeds "
+                            f"{REFINED_LIMITS[quantity]:.6e}."
+                        )
+                        test_success = False
 
             errors.append(
                 {
+                    "tag": config["tag"],
                     "solver": solver,
                     "resolution": resolution,
+                    "refined": config["refined"],
                     "phi_l2": phi_l2,
                     "gx_l2": gx_l2,
+                    "phi_max": phi_max,
+                    "gx_max": gx_max,
                 }
             )
-            plot_residual(
-                data_file, phi_error, gx_error, parameters.output_path, solver, resolution
-            )
+            plot_residual(data_file, phi_error, gx_error, parameters.output_path, config)
 
         if len(errors) != len(ALL_CFGS):
             return False
 
         with open(os.path.join(parameters.output_path, "gravity-errors.dat"), "w") as fp:
-            fp.write("# solver resolution phi_l2 gx_l2\n")
+            fp.write("# tag solver resolution refined phi_l2 gx_l2 phi_max gx_max\n")
             for row in errors:
                 fp.write(
-                    f"{row['solver']} {row['resolution']} "
-                    f"{row['phi_l2']:.16e} {row['gx_l2']:.16e}\n"
+                    f"{row['tag']} {row['solver']} {row['resolution']} "
+                    f"{int(row['refined'])} {row['phi_l2']:.16e} "
+                    f"{row['gx_l2']:.16e} {row['phi_max']:.16e} "
+                    f"{row['gx_max']:.16e}\n"
                 )
 
-        plot_convergence(errors, parameters.output_path)
+        uniform_errors = [row for row in errors if not row["refined"]]
+        plot_convergence(uniform_errors, parameters.output_path)
 
         for solver in SOLVERS:
             rows = sorted(
-                [row for row in errors if row["solver"] == solver],
+                [row for row in uniform_errors if row["solver"] == solver],
                 key=lambda row: row["resolution"],
             )
             phi_errors = np.array([row["phi_l2"] for row in rows])
