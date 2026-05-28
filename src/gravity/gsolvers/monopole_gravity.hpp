@@ -80,8 +80,8 @@ TaskID MonopoleGravitySolver::AddTasks(TaskList &tl, TaskID dep, Mesh *pmesh,
 MonopoleGravitySolver::MonopoleGravitySolver(ParameterInput *pin) : GravitySolver(pin) {
   nrbin_ = pin->GetOrAddInteger("gravity", "nrbin", -1);
   if (nrbin_ <= 0) {
-    const int nx = pin->GetInteger("parthenon/mesh", "nx");
-    nrbin_ = nx;
+    const int nx1 = pin->GetInteger("parthenon/mesh", "nx1");
+    nrbin_ = nx1;
   }
 
   m_local_ = Kokkos::View<Real *>("m_local", nrbin_);

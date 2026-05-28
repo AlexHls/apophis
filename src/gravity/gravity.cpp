@@ -176,7 +176,6 @@ std::shared_ptr<parthenon::StateDescriptor> InitializeGravity(ParameterInput *pi
 
   // If multipole solver, add solver settings
   if (gravity == Gravity::monopole) {
-    // nrbin and arrays are now handled in MonopoleGravitySolver constructor
     const Real rmax = pin->GetInteger("gravity", "rmax");
     pkg->AddParam<Real>("rmax", rmax);
   }

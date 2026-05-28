@@ -34,7 +34,7 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
         Real rho = 0.0;
 
         if (r <= r0) {
-          rho = rho0 * (1.0 - r * r * r0sqr_inv);
+          rho = rho0 * SQR(1.0 - r * r * r0sqr_inv);
         }
 
         u(IDN, k, j, i) = rho;
