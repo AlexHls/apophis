@@ -20,3 +20,5 @@ setup_test_both("riemann_hydro" "--driver ${PROJECT_BINARY_DIR}/bin/apophis \
 setup_test_both("convergence" "--driver ${PROJECT_BINARY_DIR}/bin/apophis \
   --driver_input ${PROJECT_SOURCE_DIR}/inputs/linear_wave3d.in --num_steps 12" "convergence")
 
+setup_test_both("gravity" "--driver ${PROJECT_BINARY_DIR}/bin/apophis \
+  --driver_input ${PROJECT_SOURCE_DIR}/inputs/grav_test.in --num_steps 6" "gravity")
