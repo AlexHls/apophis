@@ -44,6 +44,7 @@ struct PoissonEquation {
         (pin->GetOrAddString(label, "boundary_prolongation", "Linear") == "Constant");
   }
 
+  // Is used in the solver as BCFunc = equations_t::SetBoundary
   static TaskStatus SetBoundary(std::shared_ptr<parthenon::MeshData<Real>> &md,
                                 bool coarse) {
     for (int b = 0; b < md->NumBlocks(); b++) {
@@ -234,7 +235,7 @@ struct PoissonEquation {
     using TE = parthenon::TopologicalElement;
 
     auto desc = parthenon::MakePackDescriptor<var_t>(md.get(), {}, {PDOpt::WithFluxes});
-    auto desc_mat = parthenon::MakePackDescriptor<D_t>(md.get());
+    auto desc_mat = parthenon::MakePackDescriptor<D_t>(md_mat.get());
     auto pack = desc.GetPack(md.get());
     auto pack_mat = desc_mat.GetPack(md_mat.get());
     const std::size_t scratch_size_in_bytes = 0;
