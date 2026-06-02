@@ -18,6 +18,9 @@ import utils.test_case
 
 sys.dont_write_bytecode = True
 
+X0_OFF = 0.01
+Y0_OFF = 0.0
+Z0_OFF = 0.0
 
 SOLVERS = ["poisson", "monopole"]
 RESOLUTIONS = [16, 32, 64]
@@ -60,16 +63,12 @@ def analytic_phi(r, rho0=1.0, r0=0.25, grav_g=1.0):
     phi[~inside] = -grav_g * mtot / r[~inside]
     rin = r[inside]
     phi[inside] = (
-        -2.0 / 3.0 * np.pi * grav_g * rho0 * r0**2
+        -2.0 / 3.0 * np.pi * grav_g * rho0 * r0** 2
         + 4.0
         * np.pi
         * grav_g
         * rho0
-        * (
-            rin**2 / 6.0
-            - 1.0 / 10.0 * rin**4 / (r0**2)
-            + 1.0 / 42.0 * rin**6 / (r0**4)
-        )
+        * (rin**2 / 6.0 - 1.0 / 10.0 * rin**4 / (r0**2) + 1.0 / 42.0 * rin**6 / (r0**4))
     )
 
     return phi
@@ -89,11 +88,7 @@ def analytic_g(r, rho0=1.0, r0=0.25, grav_g=1.0):
         * np.pi
         * grav_g
         * rho0
-        * (
-            rin / 3.0
-            - 2.0 / 5.0 * rin**3 / (r0**2)
-            + 1.0 / 7.0 * rin**5 / (r0**4)
-        )
+        * (rin / 3.0 - 2.0 / 5.0 * rin**3 / (r0**2) + 1.0 / 7.0 * rin**5 / (r0**4))
     )
 
     return g
@@ -171,7 +166,7 @@ def add_cell_plot(ax, vertices, values, title, xlabel, ylabel):
     return collection
 
 
-def get_errors(data_file):
+def get_errors(data_file, solver="poisson"):
     zz, yy, xx = data_file.GetVolumeLocations(flatten=False)
     phi = data_file.Get("gravity.phi", flatten=False)
     gravity = data_file.Get("gravity", flatten=False)
@@ -181,7 +176,15 @@ def get_errors(data_file):
     r0 = 0.25
     grav_g = 1.0
 
-    radius = np.sqrt(xx**2 + yy**2 + zz**2)
+    if solver == "poisson":
+        x_center, y_center, z_center = X0_OFF, Y0_OFF, Z0_OFF
+    else:
+        x_center, y_center, z_center = 0.0, 0.0, 0.0
+
+    dx = xx - x_center
+    dy = yy - y_center
+    dz = zz - z_center
+    radius = np.sqrt(dx**2 + dy**2 + dz**2)
     phi_exact = analytic_phi(radius, rho0=rho0, r0=r0, grav_g=grav_g)
     phi_error = phi - phi_exact
 
@@ -189,7 +192,7 @@ def get_errors(data_file):
     gx_exact = np.zeros_like(g_exact)
     nonzero_radius = radius > 0.0
     gx_exact[nonzero_radius] = (
-        g_exact[nonzero_radius] * xx[nonzero_radius] / radius[nonzero_radius]
+        g_exact[nonzero_radius] * dx[nonzero_radius] / radius[nonzero_radius]
     )
     gx_error = gx - gx_exact
 
@@ -296,6 +299,9 @@ class TestCase(utils.test_case.TestCaseAbs):
             f"parthenon/meshblock/nx1={meshblock}",
             f"parthenon/meshblock/nx2={meshblock}",
             f"parthenon/meshblock/nx3={meshblock}",
+            f"problem/x0={X0_OFF if solver == 'poisson' else 0.0}",
+            f"problem/y0={Y0_OFF if solver == 'poisson' else 0.0}",
+            f"problem/z0={Z0_OFF if solver == 'poisson' else 0.0}",
             f"gravity/type={solver}",
             f"parthenon/output0/id={step}",
             "parthenon/output0/variables=gravity",
@@ -344,7 +350,7 @@ class TestCase(utils.test_case.TestCaseAbs):
                 continue
 
             data_file = phdf.phdf(data_filename)
-            phi_error, gx_error = get_errors(data_file)
+            phi_error, gx_error = get_errors(data_file, solver=solver)
             phi_l2 = l2_norm(phi_error)
             gx_l2 = l2_norm(gx_error)
             phi_max = np.max(np.abs(phi_error))
@@ -379,12 +385,16 @@ class TestCase(utils.test_case.TestCaseAbs):
                     "gx_max": gx_max,
                 }
             )
-            plot_residual(data_file, phi_error, gx_error, parameters.output_path, config)
+            plot_residual(
+                data_file, phi_error, gx_error, parameters.output_path, config
+            )
 
         if len(errors) != len(ALL_CFGS):
             return False
 
-        with open(os.path.join(parameters.output_path, "gravity-errors.dat"), "w") as fp:
+        with open(
+            os.path.join(parameters.output_path, "gravity-errors.dat"), "w"
+        ) as fp:
             fp.write("# tag solver resolution refined phi_l2 gx_l2 phi_max gx_max\n")
             for row in errors:
                 fp.write(
