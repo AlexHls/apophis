@@ -14,6 +14,9 @@ using namespace parthenon::driver::prelude;
 void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
   auto rho0 = pin->GetReal("problem", "rho0");
   auto r0 = pin->GetReal("problem", "r0");
+  auto x0 = pin->GetOrAddReal("problem", "x0", 0.0);
+  auto y0 = pin->GetOrAddReal("problem", "y0", 0.0);
+  auto z0 = pin->GetOrAddReal("problem", "z0", 0.0);
 
   const Real r0sqr_inv = 1.0 / (r0 * r0);
 
@@ -30,7 +33,7 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
         Real x = coords.Xc<1>(i);
         Real y = coords.Xc<2>(j);
         Real z = coords.Xc<3>(k);
-        Real r = std::sqrt(SQR(x) + SQR(y) + SQR(z));
+        Real r = std::sqrt(SQR(x - x0) + SQR(y - y0) + SQR(z - z0));
         Real rho = 0.0;
 
         if (r <= r0) {

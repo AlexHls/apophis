@@ -137,6 +137,90 @@ auto GetBC() {
   };
 }
 
+struct ProlongateSharedQuadratic {
+  static constexpr bool OperationRequired(parthenon::TopologicalElement fel,
+                                          parthenon::TopologicalElement cel) {
+    return fel == cel;
+  }
+
+  template <int DIM, parthenon::TopologicalElement el>
+  KOKKOS_FORCEINLINE_FUNCTION static void
+  QuadraticWeights(const parthenon::Coordinates_t &coords,
+                   const parthenon::Coordinates_t &coarse_coords, const int ci,
+                   const int fi, Real *w) {
+    const Real xm = coarse_coords.X<DIM, el>(ci - 1);
+    const Real xc = coarse_coords.X<DIM, el>(ci);
+    const Real xp = coarse_coords.X<DIM, el>(ci + 1);
+    const Real xf = coords.X<DIM, el>(fi);
+
+    w[0] = (xf - xc) * (xf - xp) / ((xm - xc) * (xm - xp));
+    w[1] = (xf - xm) * (xf - xp) / ((xc - xm) * (xc - xp));
+    w[2] = (xf - xm) * (xf - xc) / ((xp - xm) * (xp - xc));
+  }
+
+  template <int DIM, parthenon::TopologicalElement el = parthenon::TopologicalElement::CC,
+            parthenon::TopologicalElement /*cel*/ = parthenon::TopologicalElement::CC>
+  KOKKOS_FORCEINLINE_FUNCTION static void
+  Do(const int l, const int m, const int n, const int k, const int j, const int i,
+     const parthenon::IndexRange &ckb, const parthenon::IndexRange &cjb,
+     const parthenon::IndexRange &cib, const parthenon::IndexRange &kb,
+     const parthenon::IndexRange &jb, const parthenon::IndexRange &ib,
+     const parthenon::Coordinates_t &coords,
+     const parthenon::Coordinates_t &coarse_coords,
+     const parthenon::ParArrayND<Real, parthenon::VariableState> *pcoarse,
+     const parthenon::ParArrayND<Real, parthenon::VariableState> *pfine) {
+    using TE = parthenon::TopologicalElement;
+    auto &coarse = *pcoarse;
+    auto &fine = *pfine;
+
+    constexpr int element_idx = static_cast<int>(el) % 3;
+    constexpr bool INCLUDE_X1 =
+        (DIM > 0) && (el == TE::CC || el == TE::F2 || el == TE::F3 || el == TE::E1);
+    constexpr bool INCLUDE_X2 =
+        (DIM > 1) && (el == TE::CC || el == TE::F3 || el == TE::F1 || el == TE::E2);
+    constexpr bool INCLUDE_X3 =
+        (DIM > 2) && (el == TE::CC || el == TE::F1 || el == TE::F2 || el == TE::E3);
+
+    const int fi = INCLUDE_X1 ? (i - cib.s) * 2 + ib.s : ib.s;
+    const int fj = INCLUDE_X2 ? (j - cjb.s) * 2 + jb.s : jb.s;
+    const int fk = INCLUDE_X3 ? (k - ckb.s) * 2 + kb.s : kb.s;
+
+    for (int ok_child = 0; ok_child < 1 + INCLUDE_X3; ++ok_child) {
+      Real wk[3]{0.0, 1.0, 0.0};
+      if constexpr (INCLUDE_X3) {
+        QuadraticWeights<3, el>(coords, coarse_coords, k, fk + ok_child, wk);
+      }
+
+      for (int oj_child = 0; oj_child < 1 + INCLUDE_X2; ++oj_child) {
+        Real wj[3]{0.0, 1.0, 0.0};
+        if constexpr (INCLUDE_X2) {
+          QuadraticWeights<2, el>(coords, coarse_coords, j, fj + oj_child, wj);
+        }
+
+        for (int oi_child = 0; oi_child < 1 + INCLUDE_X1; ++oi_child) {
+          Real wi[3]{0.0, 1.0, 0.0};
+          if constexpr (INCLUDE_X1) {
+            QuadraticWeights<1, el>(coords, coarse_coords, i, fi + oi_child, wi);
+          }
+
+          Real value = 0.0;
+          for (int ok = -INCLUDE_X3; ok <= INCLUDE_X3; ++ok) {
+            for (int oj = -INCLUDE_X2; oj <= INCLUDE_X2; ++oj) {
+              for (int oi = -INCLUDE_X1; oi <= INCLUDE_X1; ++oi) {
+                value += wk[ok + 1] * wj[oj + 1] * wi[oi + 1] *
+                         coarse(element_idx, l, m, n, k + ok, j + oj, i + oi);
+              }
+            }
+          }
+
+          fine(element_idx, l, m, n, fk + ok_child, fj + oj_child,
+               fi + oi_child) = value;
+        }
+      }
+    }
+  }
+};
+
 std::shared_ptr<parthenon::StateDescriptor> InitializeGravity(ParameterInput *pin) {
   auto pkg = std::make_shared<parthenon::StateDescriptor>("Gravity");
   const auto gravity_str = pin->GetOrAddString("gravity", "type", "none");
@@ -269,10 +353,12 @@ std::shared_ptr<parthenon::StateDescriptor> InitializeGravity(ParameterInput *pi
 
     if (prolong == "Linear") {
       mflux_comm.RegisterRefinementOps<ProlongateSharedLinear, RestrictAverage>();
+    } else if (prolong == "Quadratic") {
+      mflux_comm.RegisterRefinementOps<ProlongateSharedQuadratic, RestrictAverage>();
     } else if (prolong == "Constant") {
       mflux_comm.RegisterRefinementOps<ProlongatePiecewiseConstant, RestrictAverage>();
     } else {
-      PARTHENON_FAIL("Unknown proongation method for gravity boundaries.");
+      PARTHENON_FAIL("Unknown prolongation method for gravity boundaries.");
     }
     pkg->AddField(phi::name(), mflux_comm);
 
