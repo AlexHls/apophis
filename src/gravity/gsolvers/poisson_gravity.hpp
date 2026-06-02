@@ -38,7 +38,7 @@ struct PoissonEquation {
   using IndependentVars = parthenon::TypeList<var_t>;
 
   PoissonEquation(parthenon::ParameterInput *pin, const std::string &label) {
-    do_flux_cor = pin->GetOrAddBoolean(label, "flux_correct", true);
+    do_flux_cor = pin->GetOrAddBoolean(label, "flux_correct", false);
     set_flux_boundary = pin->GetOrAddBoolean(label, "set_flux_boundary", false);
     include_flux_dx =
         (pin->GetOrAddString(label, "boundary_prolongation", "Linear") == "Constant");
