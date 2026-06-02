@@ -43,7 +43,7 @@ x3max = 0.25
 level = 2
 
 <parthenon/time>
-integrator = rk2
+integrator = rk1
 cfl = 0.4
 tlim = 0.8
 nlim = 1
@@ -77,6 +77,7 @@ gravity_constant = 1.0
 solver = MGBiCGSTAB
 flux_correct = true
 diagonal_alpha = 0.0
+boundary_prolongation=Quadratic
 
 <gravity/solver_params>
 precondition = true
