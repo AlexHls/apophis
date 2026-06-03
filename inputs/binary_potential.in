@@ -80,8 +80,8 @@ boundary_prolongation=Quadratic
 
 <gravity/solver_params>
 precondition = true
-max_iterations = 15
-residual_tolerance = 1.e-8
+max_iterations = 30
+residual_tolerance = 1.e-11
 print_per_step = false
 smoother = SRJ2
 do_FAS = true

@@ -31,6 +31,7 @@ BINARY_Z2 = 0.0
 BINARY_LIMITS = {
     "phi_rel_l2": 5.0e-2,
     "phi_rel_max": 5.0e-1,
+    "stored_residual_max": 1.0e-10,
 }
 
 
@@ -152,8 +153,10 @@ def get_binary_potential_errors(data_file):
     phi_exact = analytic_binary_phi(xx, yy, zz)
     phi_error = phi - phi_exact
     phi_rel_error = phi_error / phi_exact
+    phi_residual = (phi_exact - phi) / phi_exact
+    stored_residual = data_file.Get("gravity.rhs", flatten=False)
 
-    return phi_error, phi_rel_error
+    return phi_error, phi_rel_error, phi_residual, stored_residual
 
 
 def get_density(data_file):
@@ -172,12 +175,12 @@ def signed_error_norm(values):
     return TwoSlopeNorm(vcenter=0.0, vmin=-limit, vmax=limit)
 
 
-def plot_binary_potential_residual(data_file, phi_error, phi_rel_error, output_path):
+def plot_binary_potential_residual(data_file, residual, output_path):
     density = get_density(data_file)
     rho_vertices, rho_values, horizontal, vertical, normal = slice_cells(
         data_file, density
     )
-    phi_rel_vertices, phi_rel_values, *_ = slice_cells(data_file, phi_rel_error)
+    residual_vertices, residual_values, *_ = slice_cells(data_file, residual)
 
     fig, axes = plt.subplots(1, 2, figsize=(11.0, 4.6), constrained_layout=True)
     rho_image = add_cell_plot(
@@ -192,21 +195,23 @@ def plot_binary_potential_residual(data_file, phi_error, phi_rel_error, output_p
 
     rel_image = add_cell_plot(
         axes[1],
-        phi_rel_vertices,
-        phi_rel_values,
-        rf"$(\phi - \phi_\mathrm{{analytic}}) / \phi_\mathrm{{analytic}}$ through {normal}=0",
+        residual_vertices,
+        residual_values,
+        rf"$(\phi_\mathrm{{analytic}} - \phi) / \phi_\mathrm{{analytic}}$ through {normal}=0",
         horizontal,
         vertical,
         cmap="coolwarm",
-        norm=signed_error_norm(phi_rel_values),
+        norm=signed_error_norm(residual_values),
     )
-    fig.colorbar(rel_image, ax=axes[1], label=r"$\Delta\phi / \phi_\mathrm{analytic}$")
+    fig.colorbar(
+        rel_image, ax=axes[1], label=r"$(\phi_\mathrm{analytic} - \phi) / \phi_\mathrm{analytic}$"
+    )
 
     fig.suptitle(
         (
             "binary_potential: "
             f"rho max={np.max(rho_values):.3e}, "
-            f"relative phi L2={l2_norm(phi_rel_error):.3e}"
+            f"residual L2={l2_norm(residual):.3e}"
         ),
         fontsize=11,
     )
@@ -248,18 +253,26 @@ class TestCase(utils.test_case.TestCaseAbs):
             return False
 
         data_file = phdf.phdf(data_filename)
-        phi_error, phi_rel_error = get_binary_potential_errors(data_file)
+        phi_error, phi_rel_error, phi_residual, stored_residual = (
+            get_binary_potential_errors(data_file)
+        )
         phi_rel_l2 = l2_norm(phi_rel_error)
         phi_rel_max = np.max(np.abs(phi_rel_error))
+        stored_residual_max = np.max(np.abs(stored_residual - phi_residual))
 
         test_success = True
-        if not np.isfinite(phi_rel_l2) or not np.isfinite(phi_rel_max):
+        if (
+            not np.isfinite(phi_rel_l2)
+            or not np.isfinite(phi_rel_max)
+            or not np.isfinite(stored_residual_max)
+        ):
             print("Non-finite binary potential error.")
             test_success = False
 
         for quantity, value in [
             ("phi_rel_l2", phi_rel_l2),
             ("phi_rel_max", phi_rel_max),
+            ("stored_residual_max", stored_residual_max),
         ]:
             if value > BINARY_LIMITS[quantity]:
                 print(
@@ -271,14 +284,13 @@ class TestCase(utils.test_case.TestCaseAbs):
         with open(
             os.path.join(parameters.output_path, "binary-potential-errors.dat"), "w"
         ) as fp:
-            fp.write("# phi_l2 phi_rel_l2 phi_max phi_rel_max\n")
+            fp.write("# phi_l2 phi_rel_l2 phi_max phi_rel_max stored_residual_max\n")
             fp.write(
                 f"{l2_norm(phi_error):.16e} {phi_rel_l2:.16e} "
-                f"{np.max(np.abs(phi_error)):.16e} {phi_rel_max:.16e}\n"
+                f"{np.max(np.abs(phi_error)):.16e} {phi_rel_max:.16e} "
+                f"{stored_residual_max:.16e}\n"
             )
 
-        plot_binary_potential_residual(
-            data_file, phi_error, phi_rel_error, parameters.output_path
-        )
+        plot_binary_potential_residual(data_file, stored_residual, parameters.output_path)
 
         return test_success

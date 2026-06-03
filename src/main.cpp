@@ -43,6 +43,8 @@ int main(int argc, char *argv[]) {
     pman.app_input->ProblemGenerator = ec::ProblemGenerator;
   } else if (problem == "gravity_test") {
     pman.app_input->ProblemGenerator = grav_test::ProblemGenerator;
+    pman.app_input->MeshPostInitialization = grav_test::PostInitialization;
+    pman.app_input->UserWorkAfterLoop = grav_test::UserWorkAfterLoop;
   } else if (problem == "unset") {
     PARTHENON_FAIL("[Apophis]: Problem unset. Exiting.");
   } else {
