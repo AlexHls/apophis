@@ -50,6 +50,13 @@ if(Apophis_ENABLE_CUDA)
   set(Kokkos_ENABLE_CUDA_LAMBDA ON CACHE BOOL "" FORCE)
 endif()
 
+if(Apophis_ENABLE_MPI)
+  message("Enabling MPI for Apophis and all dependencies")
+  find_package(MPI REQUIRED)
+else()
+  set(PARTHENON_DISABLE_MPI ON CACHE BOOL "" FORCE)
+endif()
+
 # Parthenon
 add_subdirectory(submodules/parthenon)
 
