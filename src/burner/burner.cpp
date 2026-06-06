@@ -1,9 +1,6 @@
 #include "burner.hpp"
 #include "../main.hpp"
 
-#include "config.hpp"
-#include "kokkos_abstraction.hpp"
-#include "parthenon/parthenon.hpp"
 #include <cmath>
 
 using namespace parthenon::package::prelude;
