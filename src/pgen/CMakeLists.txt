@@ -7,4 +7,5 @@ target_sources(apophis PRIVATE
     rt.cpp
     evrards_collapse.cpp
     grav_test.cpp
+    wd.cpp
 )

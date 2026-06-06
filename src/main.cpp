@@ -45,6 +45,9 @@ int main(int argc, char *argv[]) {
     pman.app_input->ProblemGenerator = grav_test::ProblemGenerator;
     pman.app_input->MeshPostInitialization = grav_test::PostInitialization;
     pman.app_input->UserWorkAfterLoop = grav_test::UserWorkAfterLoop;
+
+  } else if (problem == "wd") {
+    pman.app_input->ProblemGenerator = wd::ProblemGenerator;
   } else if (problem == "unset") {
     PARTHENON_FAIL("[Apophis]: Problem unset. Exiting.");
   } else {

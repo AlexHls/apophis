@@ -56,4 +56,10 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin);
 void PostInitialization(Mesh *pm, ParameterInput *pin, MeshData<Real> *md);
 void UserWorkAfterLoop(Mesh *mesh, ParameterInput *pin, parthenon::SimTime &tm);
 } // namespace grav_test
+
+namespace wd {
+using namespace parthenon::driver::prelude;
+
+void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin);
+} // namespace wd
 #endif // PGEN_PGEN_HPP_
