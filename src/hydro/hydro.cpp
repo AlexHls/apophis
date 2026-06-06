@@ -271,11 +271,11 @@ std::shared_ptr<parthenon::StateDescriptor> InitializeHydro(ParameterInput *pin)
       PARTHENON_FAIL("[Apophis]: Helmholtz EOS is enabled but no composition is set. "
                      "Exiting.");
     }
-    const bool eos_rad = pin->GetOrAddReal("eos", "radiation", 1);
-    const bool eos_gas = pin->GetOrAddReal("eos", "gas", 1);
-    const bool eos_coulomb = pin->GetOrAddReal("eos", "coulomb", 1);
-    const bool eos_ionized = pin->GetOrAddReal("eos", "ionized", 1);
-    const bool eos_degenerate = pin->GetOrAddReal("eos", "degenerate", 1);
+    const bool eos_rad = pin->GetOrAddBoolean("eos", "radiation", true);
+    const bool eos_gas = pin->GetOrAddBoolean("eos", "gas", true);
+    const bool eos_coulomb = pin->GetOrAddBoolean("eos", "coulomb", true);
+    const bool eos_ionized = pin->GetOrAddBoolean("eos", "ionized", true);
+    const bool eos_degenerate = pin->GetOrAddBoolean("eos", "degenerate", true);
     std::string helm_table_file =
         pin->GetOrAddString("eos", "helm_table", "helm_table.dat");
     EOS_t eos = singularity::Helmholtz(helm_table_file, eos_rad, eos_gas, eos_coulomb,
