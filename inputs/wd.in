@@ -79,6 +79,10 @@ ofrac = 0.65
 dr = 1.0e5
 rho_cutoff = 1.0e-1
 rho_ambient = 1.0e-5
+spark_radius = -1.0
+spark_x = 0.0
+spark_y = 0.0
+spark_z = 0.0
 
 <parthenon/output0>
 file_type = hdf5

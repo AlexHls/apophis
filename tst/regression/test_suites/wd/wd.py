@@ -29,12 +29,21 @@ THERMO_DENSITY_MAX_REL_TOL = 1.0e-6
 THERMO_TEMPERATURE_MAX_REL_TOL = 1.0e-8
 THERMO_COMPOSITION_MAX_ABS_TOL = 1.0e-14
 THERMO_YE_MAX_ABS_TOL = 1.0e-14
+SPARK_RADIUS = 1.0e7
+SPARK_X = 0.0
+SPARK_Y = 0.0
+SPARK_Z = 0.0
+SPARK_LSET_ABS_TOL = 1.0e-6
+SPARK_XFUEL_ABS_TOL = 1.0e-14
 
 IDN = 0
 NHYDRO = 5
+NCOMP = 6
 O16 = NHYDRO + 2
 NE20 = NHYDRO + 3
 YE = NHYDRO + 6
+LSET0 = NHYDRO + NCOMP + 1
+XFUEL0 = LSET0 + 1
 LTEMP = 2
 
 
@@ -178,6 +187,48 @@ def grid_cell_thermo(data_file):
     }
 
 
+def grid_cell_spark(data_file):
+    cons = data_file.Get("cons", flatten=False)
+    density = cons[:, IDN]
+    nblock, nz, ny, nx = density.shape
+    npoint = nblock * nz * ny * nx
+
+    if cons.shape[1] <= XFUEL0:
+        raise RuntimeError("WD spark test expected one levelset in conserved fields.")
+
+    radii = np.empty(npoint)
+    spark_distance = np.empty(npoint)
+    lset = np.empty(npoint)
+    xfuel = np.empty(npoint)
+
+    out = 0
+    for block in range(nblock):
+        zz, yy, xx = np.meshgrid(
+            data_file.z[block], data_file.y[block], data_file.x[block], indexing="ij"
+        )
+        nlocal = xx.size
+        rho = density[block].ravel()
+
+        radii[out : out + nlocal] = np.sqrt(
+            xx.ravel() ** 2 + yy.ravel() ** 2 + zz.ravel() ** 2
+        )
+        spark_distance[out : out + nlocal] = np.sqrt(
+            (xx.ravel() - SPARK_X) ** 2
+            + (yy.ravel() - SPARK_Y) ** 2
+            + (zz.ravel() - SPARK_Z) ** 2
+        )
+        lset[out : out + nlocal] = cons[block, LSET0].ravel() / rho
+        xfuel[out : out + nlocal] = cons[block, XFUEL0].ravel() / rho
+        out += nlocal
+
+    return {
+        "radius": radii,
+        "spark_distance": spark_distance,
+        "lset": lset,
+        "xfuel": xfuel,
+    }
+
+
 def compare_profile(grid, reference):
     compare = (
         (reference["mass_fraction"] >= COMPARE_MASS_FRACTION_MIN)
@@ -203,6 +254,34 @@ def compare_profile(grid, reference):
         "reference_radius": reference_radius,
         "grid_radius": grid_radius,
         "rel_radius_error": rel_radius_error,
+    }
+
+
+def compare_spark(grid, surface_radius):
+    expected_lset = np.maximum(-1.0e12, SPARK_RADIUS - grid["spark_distance"])
+    positive = grid["spark_distance"] < SPARK_RADIUS
+    negative = grid["spark_distance"] > SPARK_RADIUS
+    inside_star = grid["radius"] <= surface_radius
+    ignited_fuel = inside_star & positive
+    unburned_fuel = inside_star & negative
+
+    if not np.any(positive):
+        raise RuntimeError("WD spark test did not find any positive levelset cells.")
+    if not np.any(negative):
+        raise RuntimeError("WD spark test did not find any negative levelset cells.")
+    if not np.any(ignited_fuel):
+        raise RuntimeError("WD spark test did not find ignited fuel cells.")
+    if not np.any(unburned_fuel):
+        raise RuntimeError("WD spark test did not find unburned fuel cells.")
+
+    return {
+        "lset_max_abs_error": np.max(np.abs(grid["lset"] - expected_lset)),
+        "positive_cell_count": np.count_nonzero(positive),
+        "negative_cell_count": np.count_nonzero(negative),
+        "positive_lset_min": np.min(grid["lset"][positive]),
+        "negative_lset_max": np.max(grid["lset"][negative]),
+        "xfuel_ignited_max": np.max(np.abs(grid["xfuel"][ignited_fuel])),
+        "xfuel_unburned_min": np.min(grid["xfuel"][unburned_fuel]),
     }
 
 
@@ -291,6 +370,24 @@ def write_thermo_metrics(metrics, output_path):
         )
 
 
+def write_spark_metrics(metrics, output_path):
+    with open(os.path.join(output_path, "wd-spark-errors.dat"), "w") as fp:
+        fp.write(
+            "# lset_max_abs_error positive_cell_count negative_cell_count "
+            "positive_lset_min negative_lset_max "
+            "xfuel_ignited_max xfuel_unburned_min\n"
+        )
+        fp.write(
+            f"{metrics['lset_max_abs_error']:.16e} "
+            f"{metrics['positive_cell_count']} "
+            f"{metrics['negative_cell_count']} "
+            f"{metrics['positive_lset_min']:.16e} "
+            f"{metrics['negative_lset_max']:.16e} "
+            f"{metrics['xfuel_ignited_max']:.16e} "
+            f"{metrics['xfuel_unburned_min']:.16e}\n"
+        )
+
+
 def plot_profile(metrics, output_path):
     fig, axes = plt.subplots(2, 1, figsize=(7, 7), sharex=True)
     axes[0].plot(
@@ -373,6 +470,11 @@ class TestCase(utils.test_case.TestCaseAbs):
             "problem/ye=0.49337656626870025",
             "problem/ofrac=0.65",
             "problem/dr=1.0e3",
+            "hydro/nlset=1",
+            f"problem/spark_radius={SPARK_RADIUS:.16e}",
+            f"problem/spark_x={SPARK_X:.16e}",
+            f"problem/spark_y={SPARK_Y:.16e}",
+            f"problem/spark_z={SPARK_Z:.16e}",
             f"eos/helm_table={os.path.join(root, 'data', 'helm_table.dat')}",
             f"parthenon/output0/id={step}",
             "parthenon/output0/variables=cons,prim,gravity,eos_lambda",
@@ -417,9 +519,12 @@ class TestCase(utils.test_case.TestCaseAbs):
         metrics = compare_profile(grid, reference)
         thermo_grid = grid_cell_thermo(data_file)
         thermo_metrics = compare_thermo_profile(thermo_grid, thermo_reference)
+        spark_grid = grid_cell_spark(data_file)
+        spark_metrics = compare_spark(spark_grid, thermo_reference["radius"][-1])
 
         write_metrics(metrics, parameters.output_path)
         write_thermo_metrics(thermo_metrics, parameters.output_path)
+        write_spark_metrics(spark_metrics, parameters.output_path)
         plot_profile(metrics, parameters.output_path)
         plot_thermo_profile(thermo_metrics, parameters.output_path)
 
@@ -468,10 +573,32 @@ class TestCase(utils.test_case.TestCaseAbs):
                 thermo_metrics["ye_max_abs_error"],
                 THERMO_YE_MAX_ABS_TOL,
             ),
+            (
+                "spark_lset_max_abs_error",
+                spark_metrics["lset_max_abs_error"],
+                SPARK_LSET_ABS_TOL,
+            ),
+            (
+                "spark_xfuel_ignited_max",
+                spark_metrics["xfuel_ignited_max"],
+                SPARK_XFUEL_ABS_TOL,
+            ),
+            (
+                "spark_xfuel_unburned_error",
+                1.0 - spark_metrics["xfuel_unburned_min"],
+                SPARK_XFUEL_ABS_TOL,
+            ),
         ]
         for name, value, limit in checks:
             if not np.isfinite(value) or value > limit:
                 print(f"WD profile {name}={value:.6e} exceeds {limit:.6e}.")
                 test_success = False
+
+        if spark_metrics["positive_lset_min"] <= 0.0:
+            print("WD spark did not create a positive levelset region.")
+            test_success = False
+        if spark_metrics["negative_lset_max"] >= 0.0:
+            print("WD spark did not leave a negative levelset region.")
+            test_success = False
 
         return test_success

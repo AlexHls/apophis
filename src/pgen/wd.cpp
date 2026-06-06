@@ -19,6 +19,7 @@ namespace {
 
 constexpr int WD_MAX_ZONES = 30000000;
 constexpr Real PI = 3.141592653589793238462643383279502884;
+constexpr Real DISABLED_SPARK_LSET = -1.0e12;
 
 struct WDProfile {
   std::vector<Real> radius;
@@ -313,10 +314,14 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
   const Real atmosphere_density =
       pin->GetOrAddReal("problem", "rho_ambient", std::max(density_floor, 1.0e-5));
   const Real atmosphere_temp = pin->GetOrAddReal("problem", "temp_ambient", tempc);
-  const Real ignition_radius = pin->GetOrAddReal("problem", "ignition_radius", -1.0);
-  const Real ignition_x = pin->GetOrAddReal("problem", "ignition_x", x0);
-  const Real ignition_y = pin->GetOrAddReal("problem", "ignition_y", y0);
-  const Real ignition_z = pin->GetOrAddReal("problem", "ignition_z", z0);
+  const Real spark_radius = GetProblemReal(pin, "spark_radius", "ignition_radius", -1.0);
+  const Real spark_x = GetProblemReal(pin, "spark_x", "ignition_x", x0);
+  const Real spark_y = GetProblemReal(pin, "spark_y", "ignition_y", y0);
+  const Real spark_z = GetProblemReal(pin, "spark_z", "ignition_z", z0);
+
+  if (spark_radius > 0.0 && nlset < 1) {
+    PARTHENON_FAIL("[Apophis]: problem/spark_radius requires hydro/nlset >= 1.");
+  }
 
   const Real abar = MeanAbar(ofrac);
   const Real zbar = abar * ye;
@@ -399,13 +404,16 @@ void ProblemGenerator(MeshBlock *pmb, ParameterInput *pin) {
         for (int lset_id = 0; lset_id < nlset; lset_id++) {
           const int lset_idx = first_lset + 2 * lset_id;
           const int xfuel_idx = lset_idx + 1;
-          const Real dx_ign = coords.Xc<1>(i) - ignition_x;
-          const Real dy_ign = (ndim > 1) ? coords.Xc<2>(j) - ignition_y : 0.0;
-          const Real dz_ign = (ndim > 2) ? coords.Xc<3>(k) - ignition_z : 0.0;
-          const Real r_ign =
-              std::sqrt(dx_ign * dx_ign + dy_ign * dy_ign + dz_ign * dz_ign);
-          const Real lset = (ignition_radius > 0.0) ? ignition_radius - r_ign
-                                                    : -surface_radius;
+          Real lset = DISABLED_SPARK_LSET;
+          if (spark_radius > 0.0) {
+            const Real dx_spark = coords.Xc<1>(i) - spark_x;
+            const Real dy_spark = (ndim > 1) ? coords.Xc<2>(j) - spark_y : 0.0;
+            const Real dz_spark = (ndim > 2) ? coords.Xc<3>(k) - spark_z : 0.0;
+            const Real r_spark =
+                std::sqrt(dx_spark * dx_spark + dy_spark * dy_spark +
+                          dz_spark * dz_spark);
+            lset = std::max(lset, spark_radius - r_spark);
+          }
           const Real xfuel = (inside_star && lset <= 0.0) ? 1.0 : 0.0;
           u(lset_idx, k, j, i) = rho * lset;
           u(xfuel_idx, k, j, i) = rho * xfuel;
