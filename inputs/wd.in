@@ -1,0 +1,91 @@
+<comment>
+problem = ONe white dwarf profile
+
+<job>
+problem_id = wd
+
+<parthenon/mesh>
+refinement = static
+nghost = 2
+
+nx1 = 32
+x1min = -1.0e9
+x1max = 1.0e9
+ix1_bc = outflow
+ox1_bc = outflow
+
+nx2 = 32
+x2min = -1.0e9
+x2max = 1.0e9
+ix2_bc = outflow
+ox2_bc = outflow
+
+nx3 = 32
+x3min = -1.0e9
+x3max = 1.0e9
+ix3_bc = outflow
+ox3_bc = outflow
+
+<parthenon/meshblock>
+nx1 = 4
+nx2 = 4
+nx3 = 4
+
+<parthenon/static_refinement1>
+x1min = -0.25e9
+x1max = 0.25e9
+x2min = -0.25e9
+x2max = 0.25e9
+x3min = -0.25e9
+x3max = 0.25e9
+level = 3
+
+<parthenon/time>
+integrator = rk1
+cfl = 0.4
+dt_init = 1.0e-6
+tlim = 0.0
+nlim = 0
+
+<hydro>
+fluid = euler
+riemann = hlle
+reconstruction = dc
+composition = ONe
+nlset = 0
+dfloor = 1.0e-5
+pfloor = 1.0e-5
+
+<eos>
+type = helm
+radiation = 1
+gas = 1
+coulomb = 1
+ionized = 1
+degenerate = 1
+helm_table = ../data/helm_table.dat
+
+<gravity>
+type = monopole
+gravity_constant = 6.673e-8
+nrbin = 256
+rmax = 1.75e9
+
+<problem>
+rhoc = 9.8
+temp = 5.0e5
+ye = 0.498
+ofrac = 0.65
+dr = 1.0e5
+rho_cutoff = 1.0e-1
+rho_ambient = 1.0e-5
+
+<parthenon/output0>
+file_type = hdf5
+dt = 0.2
+variables = cons,prim,gravity
+
+<parthenon/output1>
+file_type = hst
+dt = 0.05
+packages = Hydro
