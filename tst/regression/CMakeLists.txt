@@ -28,3 +28,6 @@ setup_test_both("binary_potential" "--driver ${PROJECT_BINARY_DIR}/bin/apophis \
 
 setup_test_both("evrards_collapse" "--driver ${PROJECT_BINARY_DIR}/bin/apophis \
   --driver_input ${PROJECT_SOURCE_DIR}/inputs/evrards_collapse.in --num_steps 4" "gravity")
+
+setup_test_both("wd" "--driver ${PROJECT_BINARY_DIR}/bin/apophis \
+  --driver_input ${PROJECT_SOURCE_DIR}/inputs/wd.in --num_steps 1" "wd")
