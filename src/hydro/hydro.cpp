@@ -298,7 +298,7 @@ std::shared_ptr<parthenon::StateDescriptor> InitializeHydro(ParameterInput *pin)
   pkg->AddParam<Real>("hydro/density_floor", dfloor);
   pkg->AddParam<Real>("hydro/pressure_floor", pfloor);
 
-  auto scratch_level = pin->GetOrAddInteger("hdyro", "scratch_level", 0);
+  auto scratch_level = pin->GetOrAddInteger("hydro", "scratch_level", 0);
   pkg->AddParam<int>("scratch_level", scratch_level);
 
   // AMR
