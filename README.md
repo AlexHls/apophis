@@ -5,7 +5,7 @@
 ```bash
 git clone https://github.com/AlexHls/apophis
 cd apophis
-mkdir build
+mkdir build && cd build
 cmake ..
 make
 ```
